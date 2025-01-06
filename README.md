@@ -102,6 +102,8 @@ project_name/
      pip install -r requirements.txt
      ```
 
+3. Virtualenv created from Python version 3.11.10
+
 ---
 
 ## Usage
