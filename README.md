@@ -49,12 +49,6 @@ project_name/
 │   ├── run_inference.py # Script for inference
 │   └── run_evaluation.py# Script for evaluation
 |
-├── experiments/         # Experiment configurations and results
-│   ├── config1.yaml     # Configuration file for experiment 1
-│   ├── config2.yaml     # Configuration file for experiment 2
-│   ├── logs/            # Training and evaluation logs
-│   └── results/         # Output metrics, charts, etc.
-|
 ├── requirements.txt     # Python dependencies
 ├── README.md            # Overview of the project
 ├── .gitignore           # Files and directories to ignore in git
@@ -83,8 +77,6 @@ project_name/
 #### `scripts/`
 - Standalone Python scripts for executing key tasks like training and inference.
 
-#### `experiments/`
-- Stores configuration files, logs, and results to ensure reproducibility.
 
 ---
 
@@ -102,7 +94,7 @@ project_name/
      pip install -r requirements.txt
      ```
 
-3. Virtualenv created from Python version 3.11.10
+3. Virtualenv created from Python version 3.11.11
 
 ---
 
