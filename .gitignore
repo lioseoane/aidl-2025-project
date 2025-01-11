@@ -1,3 +1,6 @@
+# Images
+*.jpg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -33,7 +36,9 @@ MANIFEST
 *.spec
 
 # Models
-.pth
+*.pth
+
+*.DS_Store
 
 # Installer logs
 pip-log.txt
