@@ -49,6 +49,10 @@ project_name/
 │   ├── run_inference.py # Script for inference
 │   └── run_evaluation.py# Script for evaluation
 |
+|
+└── keypoint_model.pth   # Dummy saved model
+|
+|
 ├── requirements.txt     # Python dependencies
 ├── README.md            # Overview of the project
 ├── .gitignore           # Files and directories to ignore in git
