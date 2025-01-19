@@ -109,6 +109,7 @@ stack-data==0.6.3
 sympy==1.13.1
 terminado==0.18.1
 threadpoolctl==3.5.0
+tensorboard==2.18.0
 tinycss2==1.4.0
 torch==2.5.1
 torchvision==0.20.1

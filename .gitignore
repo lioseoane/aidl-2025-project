@@ -148,6 +148,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.conda
+conda/
 
 # Spyder project settings
 .spyderproject
@@ -182,3 +184,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Ignore logs directory
+logs/
+
+# Ignore checkpoints directory
+checkpoints/
