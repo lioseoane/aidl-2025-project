@@ -35,10 +35,6 @@ project_name/
 │   │   ├── __init__.py
 │   │   ├── train.py
 │   │   └── evaluate.py
-│   ├── tracking/        # Human tracking-specific algorithms
-│   │   ├── __init__.py
-│   │   ├── tracker.py
-│   │   └── postprocessing.py
 │   └── utils/           # Helper functions and utilities
 │       ├── __init__.py
 │       ├── visualization.py
@@ -75,7 +71,6 @@ project_name/
 - **data/**: Functions for loading and preprocessing data.
 - **models/**: Neural network architectures and related utilities.
 - **training/**: Scripts for model training and evaluation.
-- **tracking/**: Algorithms and methods specific to human tracking.
 - **utils/**: Miscellaneous utility functions, such as metrics and visualizations.
 
 #### `scripts/`

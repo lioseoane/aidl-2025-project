@@ -1,9 +1,10 @@
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import torch
 import cv2
-import os
-import numpy as np
-from src.models.dummy_cnn import KeypointModel  # Assuming this is your model
-import sys
+from src.models.dummy_cnn import KeypointModel
 import random
 
 # Load the trained model
@@ -101,7 +102,7 @@ if __name__ == '__main__':
     random_image_path = os.path.join(images_folder, random.choice(image_files))
 
     # Load the trained model
-    model = load_model('keypoint_model.pth')
+    model = load_model('checkpoints/model_epoch_10.pth')
 
     # Run inference and visualize keypoints for the random image
     image_tensor, padding = preprocess_image(random_image_path, target_size=128)

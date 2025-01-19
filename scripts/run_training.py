@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from src.data.dataloader import create_dataloaders
 from src.data.load_mpii_data import load_mpii_data
 from src.models.dummy_cnn import KeypointModel
@@ -17,7 +21,7 @@ optimizer = optim.Adam(model.parameters(), lr=1e-3)
 criterion = torch.nn.MSELoss()
 
 # Train the model
-train_model(train_loader, model, optimizer, criterion, num_epochs=2)
+train_model(train_loader, model, optimizer, criterion, num_epochs=10)
 
 # Save the trained model
 model_save_path = './keypoint_model.pth'  # Specify the path to save the model
