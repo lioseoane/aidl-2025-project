@@ -48,17 +48,19 @@ def Fast_RCNN(num_classes, num_keypoints):
     # Load a pre-trained Faster R-CNN model with MobileNet backbone
     backbone = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
 
-    # --- Replace Box Predictor ---
-    # Modify the box predictor to classify `num_classes`
+    # Replace Box Predictor
     in_features_box_classifier = backbone.roi_heads.box_predictor.cls_score.in_features
     backbone.roi_heads.box_predictor = FastRCNNPredictor(in_features_box_classifier, num_classes)
 
-    # --- Add Custom Keypoint Predictor ---
-    # Extract the input feature map size for keypoints (from the shared ROI head)
-    in_channels_keypoint = backbone.roi_heads.box_head.fc7.out_features  # Output of the box head's final FC layer
+    # Add Custom Keypoint Predictor
+    in_channels_keypoint = backbone.roi_heads.box_head.fc7.out_features
     custom_keypoint_predictor = KeypointHeadPrediction(in_channels=in_channels_keypoint, num_keypoints=num_keypoints)
 
-    # Integrate the custom keypoint predictor into the model
+    # Ensure roi_heads knows about keypoints
     backbone.roi_heads.keypoint_predictor = custom_keypoint_predictor
+    backbone.roi_heads.keypoint_roi_pool = torchvision.ops.MultiScaleRoIAlign(
+        featmap_names=['0'], output_size=14, sampling_ratio=2
+    )
 
     return backbone
+
