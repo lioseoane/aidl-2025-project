@@ -65,6 +65,9 @@ def load_workout_data():
                     # Reshape keypoints into [x, y] (ignoring visibility)
                     keypoints = [[values[i], values[i+1]] for i in range(5, len(values), 2)]
 
+                    if len(keypoints) != 17:  # Exclude images that do not have 17 keypoints
+                        continue
+
                 # Only now that the annotation is valid, append to arrays
                 # Append class label (folder name) to classes_array
                 classes_array.append(class_name)  # class_name is the folder name

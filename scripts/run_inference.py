@@ -3,116 +3,62 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import torch
+import matplotlib.pyplot as plt
 import cv2
-from src.models.dummy_cnn import KeypointModel
-import random
+from src.data.load_workout_data import load_workout_data
+from src.models.fast_rcnn import Fast_RCNN
+from src.data.dataset import NewKeypointDataset
+
+# Set device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# keypoints_array, images_array, head_boxes_array = load_mpii_data()
+keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
+
+num_classes = len(set(classes_array)) + 1 
+num_keypoints = 17
+model = Fast_RCNN(num_classes=num_classes, num_keypoints=num_keypoints)
+
+model_path = "keypoint_model.pth"
+model.load_state_dict(torch.load(model_path))
 
 # Load the trained model
-def load_model(model_path='keypoint_model.pth'):
-    """
-    Load the trained model from the specified path.
-    """
-    model = KeypointModel(num_keypoints=16, input_size=128)
-    model.load_state_dict(torch.load(model_path))  # Load the saved model weights
-    model.eval()  # Set the model to evaluation mode
-    return model
+model.eval()
+model.to(device)
 
-def preprocess_image(image_path, target_size=128):
-    """
-    Load and preprocess the image for prediction.
-    Resize with padding to match target_size (128x128), preserving the aspect ratio.
-    """
-    # Load the original image
-    image = cv2.imread(image_path)
-    
-    # Check if the image is loaded properly
-    if image is None:
-        raise ValueError(f"Failed to load image from path: {image_path}")
-    
-    # Get original dimensions
-    original_h, original_w, _ = image.shape
-    scale = target_size / max(original_h, original_w)
-    new_w, new_h = int(original_w * scale), int(original_h * scale)
+# Load a single image from the dataset
+dataset = NewKeypointDataset(images_array, bounding_boxes_array, keypoints_array, classes_array, resize_to=224)
+image_idx = 1  # Change this index to test different images
+image, target = dataset[image_idx]
 
-    # Resize the image to fit within the target size while maintaining aspect ratio
-    resized_image = cv2.resize(image, (new_w, new_h))
+# Prepare the image
+image = image.to(device).unsqueeze(0)  # Add batch dimension
 
-    # Calculate padding (to make the image square with 128x128 dimensions)
-    pad_top = (target_size - new_h) // 2
-    pad_bottom = target_size - new_h - pad_top
-    pad_left = (target_size - new_w) // 2
-    pad_right = target_size - new_w - pad_left
+# Make prediction
+with torch.no_grad():
+    predictions = model(image)
 
-    # Pad the image with black borders to make it 128x128
-    padded_image = cv2.copyMakeBorder(
-        resized_image, pad_top, pad_bottom, pad_left, pad_right,
-        borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0]
-    )
+print(predictions)
+# Process predictions
+predicted_boxes = predictions[0]['boxes'].cpu().numpy()
+predicted_labels = predictions[0]['labels'].cpu().numpy()
+predicted_scores = predictions[0]['scores'].cpu().numpy()
 
-    # Normalize the image (0-255 to 0-1 range)
-    padded_image = padded_image / 255.0
+# Filter predictions (e.g., keep those with high confidence)
+threshold = 0.5
+filtered_boxes = predicted_boxes[predicted_scores >= threshold]
+filtered_labels = predicted_labels[predicted_scores >= threshold]
 
-    # Convert to tensor and add batch dimension (CxHxW)
-    image_tensor = torch.tensor(padded_image, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
+# Visualize the results
+image_np = image.squeeze(0).permute(1, 2, 0).cpu().numpy()  # Convert back to NumPy
+image_np = (image_np * 255).astype('uint8')  # Denormalize
 
-    # Return padding values to later reverse keypoint denormalization
-    return image_tensor, (pad_left, pad_top, scale)
+for box, label in zip(filtered_boxes, filtered_labels):
+    x1, y1, x2, y2 = box
+    cv2.rectangle(image_np, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+    cv2.putText(image_np, str(label), (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-def visualize_keypoints(image_path, predicted_keypoints, padding, target_size=128):
-    """
-    Visualize the predicted keypoints on the original image.
-    The keypoints are denormalized to the original image size.
-    """
-    # Load the original image
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    # Get the padding information
-    pad_left, pad_top, scale = padding
-
-    # Denormalize the keypoints to match the original image size
-    denormalized_keypoints = []
-    for (x, y) in predicted_keypoints:
-        # Rescale the keypoints to the original image dimensions
-        original_x = (x * target_size - pad_left) / scale
-        original_y = (y * target_size - pad_top) / scale
-        denormalized_keypoints.append((original_x, original_y))
-
-    # Draw the keypoints on the original image
-    for (x, y) in denormalized_keypoints:
-        # Convert the coordinates to integers
-        x, y = int(x), int(y)
-        cv2.circle(image, (x, y), 5, (0, 255, 0), -1)
-
-    # Display the image with keypoints
-    try:
-        cv2.imshow("Keypoints", image)
-        cv2.waitKey(0)
-    finally:
-        cv2.destroyAllWindows()
-        sys.exit()  # Ensure the script exits completely
-
-if __name__ == '__main__':
-    # Path to the images folder
-    images_folder = 'data/mpii_human_pose/images'
-
-    # Get a random image from the images folder
-    image_files = os.listdir(images_folder)
-    image_files = [f for f in image_files if f.endswith(('.jpg', '.jpeg', '.png'))]  # Only image files
-    random_image_path = os.path.join(images_folder, random.choice(image_files))
-
-    # Load the trained model
-    model = load_model('checkpoints/model_epoch_10.pth')
-
-    # Run inference and visualize keypoints for the random image
-    image_tensor, padding = preprocess_image(random_image_path, target_size=128)
-
-    # Run inference
-    with torch.no_grad():
-        predictions = model(image_tensor)  # model inference
-
-    # Convert prediction to keypoints (output from the model)
-    predicted_keypoints = predictions.squeeze().cpu().numpy().reshape(-1, 2)
-
-    # Visualize the keypoints on the original image
-    visualize_keypoints(random_image_path, predicted_keypoints, padding, target_size=128)
+# Plot the image
+plt.imshow(image_np)
+plt.axis('off')
+plt.show()

@@ -1,66 +1,89 @@
-import torch.nn as nn
-import torchvision
 import torch
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+import torch.nn as nn
+import torch.nn.functional as F
+import torchvision
 
-class KeypointHeadPrediction(nn.Module):
-    def __init__(self, in_channels, num_keypoints):
-        super(KeypointHeadPrediction, self).__init__()
+class Fast_RCNN(nn.Module):
+    def __init__(self, num_classes, num_keypoints):
+        super(Fast_RCNN, self).__init__()
+
+        # Load the pre-trained Faster R-CNN model
+        self.model = torchvision.models.detection.keypointrcnn_resnet50_fpn(pretrained=True)
+        self.backbone = self.model.backbone
+        self.feature_map_size = 256  
+
+        for param in self.backbone.parameters():
+            param.requires_grad = True
         
-        # First convolutional block
-        self.conv1 = nn.Conv2d(in_channels, 256, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(256)
-        self.relu = nn.ReLU()
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)  # Downsample spatial dimensions by 2
+         # Bounding Box Regression Head
+        self.bbox_regression = nn.Sequential(
+            nn.Conv2d(self.feature_map_size, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 4, kernel_size=1),  # Output 4 coordinates (x_min, y_min, x_max, y_max)
+            nn.AdaptiveAvgPool2d(1)  # Output shape [batch_size, 4, 1, 1]
+        )
+
+        # Keypoint Predictor Head
+        self.keypoint_predictor = nn.Sequential(
+            nn.Conv2d(self.feature_map_size, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, num_keypoints * 3, kernel_size=1),  # Output (x, y, visibility) for each keypoint
+            nn.AdaptiveAvgPool2d(1) # Output shape [batch_size, num_keypoints*3, 1, 1]
+        )
+
+        # Classification Head
+        self.classification = nn.Sequential(
+            nn.Conv2d(self.feature_map_size, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, num_classes, kernel_size=1), # Output class scores
+            nn.AdaptiveAvgPool2d(1) # Output shape [batch_size, num_classes, 1, 1]
+        )
         
-        # Second convolutional block
-        self.conv2 = nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm2d(128)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+    def forward(self, images):
+
+        # Forward pass through the Faster R-CNN model
+        feature_maps = self.backbone(images)  # Feature maps from the FPN
+        feature_map_0 = feature_maps['0']  # Highest resolution (for small objects)
+
+        # Forward pass through the custom heads
+        bbox = self.bbox_regression(feature_map_0)  # Bounding boxes from feature map
+        bbox = bbox.flatten(start_dim=1) # Reshape to [batch_size, 4]
+        bbox = bbox.unsqueeze(1) # Reshape to [batch_size, 1, 4]
+
+        keypoints = self.keypoint_predictor(feature_map_0)  # Keypoints from feature map
+        keypoints = keypoints.flatten(start_dim=1) # Reshape to [batch_size, num_keypoints*3]
+        keypoints = keypoints.view(keypoints.size(0), 17, 3) # Reshape to [batch_size, num_keypoints, 3]
+
+        classes = self.classification(feature_map_0) # Class scores from feature map
+        classes = classes.flatten(start_dim=1) # Reshape to [batch_size, num_classes]
         
-        # Third convolutional block
-        self.conv3 = nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3 = nn.BatchNorm2d(64)
+        return {
+            'boxes': bbox,     
+            'keypoints': keypoints,  
+            'labels': classes   
+        }      
+    
+    def compute_losses(self, predicted_boxes, predicted_keypoints, predicted_labels, new_targets):
+
+        batch_size = len(new_targets)
+        target_boxes = torch.stack([new_targets[i]["boxes"] for i in range(batch_size)])  # (batch_size, 1, 4)
+        target_keypoints = torch.stack([new_targets[i]["keypoints"] for i in range(batch_size)])  # (batch_size, 17, 3)
+        target_labels = torch.stack([new_targets[i]["labels"] for i in range(batch_size)])  # (batch_size, 1)
+    
+        # 1. Compute bounding box loss (Smooth L1 loss)
+        bbox_loss = F.smooth_l1_loss(predicted_boxes.squeeze(1), target_boxes.squeeze(1), reduction='mean')
         
-        # Final convolution to predict (x, y) for each keypoint
-        self.conv_out = nn.Conv2d(64, num_keypoints * 2, kernel_size=1, stride=1)
+        # 2. Compute keypoint loss (MSE loss)
+        keypoint_loss = F.mse_loss(predicted_keypoints.view(-1, 3), target_keypoints.view(-1, 3), reduction='mean')
 
-    def forward(self, x):
-        # Pass through convolutional blocks
-        x = self.relu(self.bn1(self.conv1(x)))
-        x = self.pool1(x)
-        x = self.relu(self.bn2(self.conv2(x)))
-        x = self.pool2(x)
-        x = self.relu(self.bn3(self.conv3(x)))
+        # 3. Compute classification loss (Cross-entropy loss)
+        class_loss = nn.CrossEntropyLoss()(predicted_labels.squeeze(1), target_labels.squeeze(1).long())  
 
-        # Final output layer
-        x = self.conv_out(x)
+        # Return the losses in a dictionary
+        losses = {
+            'bbox_loss': bbox_loss,
+            'keypoint_loss': keypoint_loss,
+            'class_loss': class_loss
+        }
 
-        # Flatten spatial dimensions and reshape to [batch_size, num_keypoints, 2]
-        x = x.flatten(start_dim=2)  # [batch_size, num_keypoints * 2, height * width]
-        x = x.mean(dim=-1)  # Global average pooling over the spatial dimensions
-        x = x.view(x.size(0), -1, 2)  # [batch_size, num_keypoints, 2]
-        
-        return x
-
-
-def Fast_RCNN(num_classes, num_keypoints):
-    # Load a pre-trained Faster R-CNN model with MobileNet backbone
-    backbone = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
-
-    # Replace Box Predictor
-    in_features_box_classifier = backbone.roi_heads.box_predictor.cls_score.in_features
-    backbone.roi_heads.box_predictor = FastRCNNPredictor(in_features_box_classifier, num_classes)
-
-    # Add Custom Keypoint Predictor
-    in_channels_keypoint = backbone.roi_heads.box_head.fc7.out_features
-    custom_keypoint_predictor = KeypointHeadPrediction(in_channels=in_channels_keypoint, num_keypoints=num_keypoints)
-
-    # Ensure roi_heads knows about keypoints
-    backbone.roi_heads.keypoint_predictor = custom_keypoint_predictor
-    backbone.roi_heads.keypoint_roi_pool = torchvision.ops.MultiScaleRoIAlign(
-        featmap_names=['0'], output_size=14, sampling_ratio=2
-    )
-
-    return backbone
-
+        return losses
