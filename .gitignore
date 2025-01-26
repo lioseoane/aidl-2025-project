@@ -190,3 +190,6 @@ logs/
 
 # Ignore checkpoints directory
 checkpoints/
+
+# Yolo data
+yolo_data/
