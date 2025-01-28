@@ -19,6 +19,7 @@ def create_dataloaders(image_paths, bounding_boxes, keypoints, class_names, batc
     Returns:
         train_loader (DataLoader): DataLoader for the training dataset.
         val_loader (DataLoader): DataLoader for the validation dataset.
+        class_name_to_idx (dict): Class to index mapping.
     """
     # Split the data into training and validation sets
     train_image_paths, val_image_paths, train_bounding_boxes, val_bounding_boxes, train_keypoints, val_keypoints, train_class_names, val_class_names = train_test_split(
@@ -33,4 +34,4 @@ def create_dataloaders(image_paths, bounding_boxes, keypoints, class_names, batc
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
-    return train_loader, val_loader
+    return train_loader, val_loader, train_dataset.class_name_to_idx

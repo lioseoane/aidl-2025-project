@@ -27,14 +27,7 @@ class WorkoutDataset(Dataset):
 
         # Convert class name to class index (numerical label)
         class_label = self.class_name_to_idx[class_name]
-
-        if class_name is None or class_name not in self.class_name_to_idx:
-            print(f"Warning: Invalid or missing class_name at index {idx}: {class_name}")
-            class_label = -1  # Set to a default invalid class index
-        else:
-            # Convert class name to class index (numerical label)
-            class_label = self.class_name_to_idx[class_name]
-
+        
         # Load the image
         image = cv2.imread(image_filename)
         if image is None:
@@ -75,7 +68,12 @@ class WorkoutDataset(Dataset):
 
         # Add visibility flag: If keypoint is (0, 0), set visibility to 0, otherwise set it to 1
         visibility = np.ones((keypoints.shape[0], 1))  # Start with visibility flag 1 for all
-        visibility[(keypoints[:, 0] == 0) & (keypoints[:, 1] == 0)] = 0  # Set visibility to 0 if (x, y) == (0, 0)
+        visibility[(keypoints[:, 0] == 0) | (keypoints[:, 1] == 0)] = 0  # Set visibility to 0 if (x, y) == (0, 0)
+
+        # Set keypoints to (0, 0) if visibility is 0 after padding and normalization (for consistency)
+        for i in range(len(visibility)):
+            if visibility[i] == 0:  # If visibility is 0
+                keypoints[i] = [0.0, 0.0]
 
         # Stack the visibility flag with the keypoints
         keypoints = np.column_stack([keypoints, visibility])  # Add visibility as the third dimension
@@ -84,17 +82,18 @@ class WorkoutDataset(Dataset):
         image_tensor = torch.tensor(padded_image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
         bbox_tensor = torch.tensor(bbox, dtype=torch.float32).unsqueeze(0) 
         keypoints_tensor = torch.tensor(keypoints, dtype=torch.float32)
-        class_label_tensor = torch.tensor(class_label, dtype=torch.int64).unsqueeze(0) 
 
-        #class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)
-        #if class_label >= 0:  # Only assign if the class label is valid
-            #class_label_one_hot[class_label] = 1
+        class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)
+        if class_label >= 0:  # Only assign if the class label is valid
+            class_label_one_hot[class_label] = 1
 
 
         # Create the target dictionary
         target = {}
-        target['boxes'] = bbox_tensor
-        target['labels'] = class_label_tensor  
+        target['bbox'] = bbox_tensor
+        target['workout_label'] = class_label_one_hot  
         target['keypoints'] = keypoints_tensor
+        target['filename'] = image_filename
+        target['workout_label_name'] = class_name
 
         return image_tensor, target

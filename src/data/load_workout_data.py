@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image
 
-def load_workout_data():
+def load_workout_data(image_dir="workout_dataset\images", annotation_dir="workout_dataset\labels"):
     # Hardcoded paths
-    image_dir = "workout_dataset\images"
-    annotation_dir = "workout_dataset\labels"
+    image_dir = image_dir
+    annotation_dir = annotation_dir
 
     # Initialize arrays to store the results
     keypoints_array = []
