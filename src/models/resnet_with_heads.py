@@ -22,21 +22,21 @@ class resnet_with_heads(nn.Module):
             param.requires_grad = False
 
         self.bbox_head = nn.Sequential(
-            nn.Linear(self.input_size , 512),
+            nn.Linear(self.input_size , self.input_size),
             nn.ReLU(),
-            nn.Linear(512, 4)
+            nn.Linear(self.input_size, 4)
         )
 
         self.keypoints_head = nn.Sequential(
-            nn.Linear(self.input_size , 512),
+            nn.Linear(self.input_size , self.input_size),
             nn.ReLU(),
-            nn.Linear(512, num_keypoints * 3)
+            nn.Linear(self.input_size, num_keypoints * 3)
         )
 
         self.workout_label_head = nn.Sequential(
-            nn.Linear(self.input_size , 512),
+            nn.Linear(self.input_size , self.input_size),
             nn.ReLU(),
-            nn.Linear(512, num_classes)
+            nn.Linear(self.input_size, num_classes)
         )
 
     def forward(self, x):

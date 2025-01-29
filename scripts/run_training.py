@@ -17,11 +17,11 @@ train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, b
 # Initialize model, optimizer, and loss function
 num_classes = len(set(classes_array)) 
 num_keypoints = 17
-model = resnet_with_heads(num_classes=num_classes, num_keypoints=num_keypoints)
+model = resnet_with_heads(num_classes=num_classes, num_keypoints=num_keypoints, use_resnet34=False)
 
 # Train the model
 train_model(train_loader, model, class_name_to_idx, num_epochs=50)
 
 # Save the trained model
-model_save_path = './keypoint_model.pth'  # Specify the path to save the model
+model_save_path = './resnet50_2.pth'  # Specify the path to save the model
 torch.save(model.state_dict(), model_save_path)
