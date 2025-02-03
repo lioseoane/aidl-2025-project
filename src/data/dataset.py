@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 class WorkoutDataset(Dataset):
-    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to=128):
+    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to=[480,360]):
 
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
@@ -36,51 +36,62 @@ class WorkoutDataset(Dataset):
 
         # Get original dimensions
         h, w, _ = image.shape
-        scale = self.resize_to / max(h, w)
-        new_w, new_h = int(w * scale), int(h * scale)
+        target_w, target_h = self.resize_to
 
-        # Resize image while keeping aspect ratio
-        resized_image = cv2.resize(image, (new_w, new_h))
+        scale_w = target_w / float(w)
+        scale_h = target_h / float(h)
 
-        # Calculate padding
-        pad_top = (self.resize_to - new_h) // 2
-        pad_bottom = self.resize_to - new_h - pad_top
-        pad_left = (self.resize_to - new_w) // 2
-        pad_right = self.resize_to - new_w - pad_left
-
-        # Add padding
-        padded_image = cv2.copyMakeBorder(
-            resized_image, pad_top, pad_bottom, pad_left, pad_right,
-            borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0]
-        )
-
-        # Normalize bounding box based on the resized and padded image
         bbox = np.array(bbox)
-        bbox = bbox * [new_w, new_h, new_w, new_h]  # Rescale to the resized image size
-        bbox += [pad_left, pad_top, pad_left, pad_top]
-        bbox = bbox / [self.resize_to, self.resize_to, self.resize_to, self.resize_to]
-
-        # Normalize keypoints to resized and padded dimensions
         keypoints = np.array(keypoints)
-        keypoints *= [new_w, new_h]
-        keypoints += [pad_left, pad_top]
-        keypoints /= [self.resize_to, self.resize_to]
 
-        # Add visibility flag: If keypoint is (0, 0), set visibility to 0, otherwise set it to 1
+         # Add visibility flag: If keypoint is (0, 0), set visibility to 0, otherwise set it to 1
         visibility = np.ones((keypoints.shape[0], 1))  # Start with visibility flag 1 for all
         visibility[(keypoints[:, 0] == 0) | (keypoints[:, 1] == 0)] = 0  # Set visibility to 0 if (x, y) == (0, 0)
 
-        # Set keypoints to (0, 0) if visibility is 0 after padding and normalization (for consistency)
-        for i in range(len(visibility)):
-            if visibility[i] == 0:  # If visibility is 0
-                keypoints[i] = [0.0, 0.0]
+        if scale_w == 1.0 and scale_h == 1.0:
+            padded_image = image
+        else:
+            scale = min(scale_w, scale_h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            image = cv2.resize(image, (new_w, new_h))
+
+            if  scale_w != scale_h:
+                # Rescale to the resized image size
+                bbox = bbox * [new_w, new_h, new_w, new_h]
+                keypoints *= [new_w, new_h]
+
+                # Calculate padding
+                pad_top = (target_h  - new_h) // 2
+                pad_bottom = target_h - new_h - pad_top
+                pad_left = (target_w - new_w) // 2
+                pad_right = target_w  - new_w - pad_left
+
+                # Add padding
+                image = cv2.copyMakeBorder(
+                    image, pad_top, pad_bottom, pad_left, pad_right,
+                    borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0]
+                )
+                
+                # Add padding
+                bbox += [pad_left, pad_top, pad_left, pad_top]
+                keypoints += [pad_left, pad_top]
+
+                # Normalized to 0,1
+                bbox = bbox / [target_w, target_h, target_w, target_h]
+                keypoints /= [target_w, target_h]
+
+                # Set keypoints to (0, 0) if visibility is 0 after padding and normalization (for consistency)
+                for i in range(len(visibility)):
+                    if visibility[i] == 0:  # If visibility is 0
+                        keypoints[i] = [0.0, 0.0]
+
 
         # Stack the visibility flag with the keypoints
         keypoints = np.column_stack([keypoints, visibility])  # Add visibility as the third dimension
 
         # Convert to tensors
-        image_tensor = torch.tensor(padded_image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
-        bbox_tensor = torch.tensor(bbox, dtype=torch.float32).unsqueeze(0) 
+        image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
+        bbox_tensor = torch.tensor(bbox, dtype=torch.float32)
         keypoints_tensor = torch.tensor(keypoints, dtype=torch.float32)
 
         class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)

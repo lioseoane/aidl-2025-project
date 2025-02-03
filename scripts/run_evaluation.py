@@ -12,12 +12,12 @@ import torch
 keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
 
 # Create dataloaders
-train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, bounding_boxes_array, keypoints_array, classes_array, batch_size=64, resize_to=300)
+train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, bounding_boxes_array, keypoints_array, classes_array, batch_size=64, resize_to=[480,360])
 
 # Initialize model
 num_classes = len(set(classes_array)) 
 num_keypoints = 17
-model = resnet_with_heads(num_classes=num_classes, num_keypoints=num_keypoints)
+model = resnet_with_heads(num_classes=num_classes, num_keypoints=num_keypoints, use_resnet34=False)
 
 # Load the trained model from a checkpoint
 model_checkpoint_path = './keypoint_model.pth'

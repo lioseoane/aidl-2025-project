@@ -7,9 +7,10 @@ from src.utils.visualization import visualize_keypoints
 from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy
 
 
-def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="logs/train_logs", checkpoint_dir="checkpoints"):
+def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="logs/train_logs", checkpoint_dir="checkpoints", loss_weighted=False):
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3)  # Initialize optimizer
+    #optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
 
@@ -54,10 +55,18 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
             # Forward pass
             output = model(images) 
-            losses = model.compute_losses(output, new_targets)
-            loss = sum(loss for loss in losses)
+
+            if loss_weighted == True:
+                loss = model.compute_losses(output, new_targets, weighted=True)
+            else:
+                losses = model.compute_losses(output, new_targets, weighted=False)
+                loss = sum(loss for loss in losses)
 
             loss.backward()  # Backpropagate the loss
+
+            # Gradient Clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
+
             optimizer.step()  # Update model weights
 
             running_loss += loss.item()  # Accumulate loss for averaging
@@ -71,7 +80,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
             total_classification_correct += classification_accuracy * len(workout_label_targets)
             total_classification_count += len(workout_label_targets)
 
-            # Calculate bbox and keypoint accuracy
+            # Calculate bbox accuracy
             bbox_targets = torch.stack([target['bbox'] for target in new_targets]) 
             bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
             total_bbox_correct += bbox_accuracy * len(bbox_targets)
@@ -98,9 +107,9 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                         sample_image, 
                         keypoints[i].cpu().detach().numpy(), 
                         keypoints_targets[i].cpu().numpy(), 
-                        sample_image.shape[1], 
                         sample_image.shape[2], 
-                        bbox[i].squeeze().cpu().detach().numpy(), 
+                        sample_image.shape[1], 
+                        bbox[i].cpu().detach().numpy(), 
                         bbox_targets[i].cpu().detach().numpy()
                     )
 
