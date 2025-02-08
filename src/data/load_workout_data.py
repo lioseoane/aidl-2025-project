@@ -21,6 +21,7 @@ def load_workout_data(image_dir="workout_dataset\images", annotation_dir="workou
 
         # Skip if annotation directory doesn't exist
         if not os.path.exists(class_annotation_dir):
+            print(f"Annotation directory {class_annotation_dir} does not exist, skipping.")
             continue
 
         # Loop through images in the class subdirectory
@@ -31,7 +32,7 @@ def load_workout_data(image_dir="workout_dataset\images", annotation_dir="workou
 
                 # Check if the annotation file exists
                 if not os.path.exists(txt_path):
-                    # print(f"Warning: No annotation file found for {img_filename}, skipping.")
+                    print(f"No annotation file found for {img_filename}, skipping.")
                     continue  # Skip this image if annotation is not found
 
                 # Parse annotation
@@ -41,7 +42,7 @@ def load_workout_data(image_dir="workout_dataset\images", annotation_dir="workou
 
                     # If the annotation content is empty or does not contain enough values
                     if not content:
-                        # print(f"Warning: Annotation file {txt_path} is empty, skipping.")
+                        print(f"Annotation file {txt_path} is empty, skipping.")
                         continue
                     
                     # Split the values and convert them to float
@@ -49,7 +50,7 @@ def load_workout_data(image_dir="workout_dataset\images", annotation_dir="workou
 
                     # Ensure there are enough values for bbox (4) and keypoints (remaining)
                     if len(values) < 5:  # At least 4 for bounding box and 1 for keypoints
-                        # print(f"Warning: Invalid annotation format in {txt_path}, skipping.")
+                        print(f"Invalid annotation format in {txt_path}, skipping.")
                         continue
 
                     # Extract bounding box parameters (x_center, y_center, width, height)
@@ -63,9 +64,11 @@ def load_workout_data(image_dir="workout_dataset\images", annotation_dir="workou
                     bbox = [x_min, y_min, x_max, y_max]
 
                     # Reshape keypoints into [x, y] (ignoring visibility)
-                    keypoints = [[values[i], values[i+1]] for i in range(5, len(values), 2)]
+                    # keypoints = [[values[i], values[i+1]] for i in range(5, len(values), 2)]
+                    keypoints = [[values[i], values[i+1], values[i+2]] for i in range(5, len(values)-1, 3)]
 
                     if len(keypoints) != 17:  # Exclude images that do not have 17 keypoints
+                        print(f"Invalid number of keypoints in {txt_path}, skipping.")
                         continue
 
                 # Only now that the annotation is valid, append to arrays
@@ -129,8 +132,12 @@ def plot_image_with_annotations(image_path, bbox, keypoints, class_name):
 
 
 if __name__ == "__main__":
-    # Load the dataset
-    keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
+    # PROJECT_DIR = os.path.abspath(os.path.join(os.getcwd(), '..'))
+    PROJECT_DIR = "/home/andres/Escritorio/aidl-2025-project"
+    image_dir = os.path.join(PROJECT_DIR, 'workout_dataset/images')
+    annotation_dir = os.path.join(PROJECT_DIR, 'workout_dataset/new_labels')
+    keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data(image_dir=image_dir, annotation_dir=annotation_dir)
+    print(len(keypoints_array), len(images_array), len(bounding_boxes_array), len(classes_array))
 
     # Get the first image and its annotations
     image_path = images_array[0]
