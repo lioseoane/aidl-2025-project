@@ -1,32 +1,55 @@
 import numpy as np
 import torch
 
-def calculate_classification_accuracy(predicted_labels, true_labels):
-
+def calculate_classification_accuracy(predicted_labels, true_labels, num_classes):
     # Get the predicted class labels
     predicted_labels = torch.argmax(predicted_labels, dim=1)
     true_labels = torch.argmax(true_labels, dim=1)
 
     # Count correct predictions
     correct = (predicted_labels == true_labels).sum().item()  
-    
-    # Calculate accuracy
     accuracy = correct / len(true_labels)  
-    return accuracy
 
-def calculate_keypoint_accuracy(predicted_keypoints, true_keypoints, threshold=0.03):
+    # Initialize variables for overall precision and recall
+    TP = ((predicted_labels == true_labels) & (true_labels != -1)).sum().item()  # True Positives (ignoring padding)
+    FP = ((predicted_labels != true_labels) & (true_labels != -1)).sum().item()  # False Positives (ignoring padding)
+    FN = ((predicted_labels != true_labels) & (true_labels != -1)).sum().item()  # False Negatives (ignoring padding)
+    
+    return accuracy, TP, FP, FN
 
-    # Extract (x, y) and visibility flag
-    pred_xy = predicted_keypoints[:, :, :2]
-    true_xy = true_keypoints[:, :, :2]  # Shape: (num_keypoints, 2)
-    visibility = true_keypoints[:, :, 2]  # Shape: (num_keypoints,)
+def calculate_keypoint_accuracy(predicted_keypoints, true_keypoints, threshold=0.01):
+    batch_size, num_keypoints, last_dim = predicted_keypoints.shape
 
-    # Calculate Euclidean distance between predicted and true keypoints
+    if last_dim == 2:
+        # Already (x, y)
+        pred_xy = predicted_keypoints
+        true_xy = true_keypoints
+
+        # Assume all keypoints are visible
+        visible_mask = torch.ones(batch_size, num_keypoints, dtype=torch.bool)
+
+    elif last_dim == 3:
+        # Extract (x, y)
+        pred_xy = predicted_keypoints[:, :, :2]
+        true_xy = true_keypoints[:, :, :2]
+
+        # Extract visibility if it exists
+        if true_keypoints.shape[-1] == 3:
+            visibility = true_keypoints[:, :, 2] > 0  # Boolean mask where visibility > 0
+        else:
+            # If no visibility information, assume all keypoints are visible
+            visibility = torch.ones(batch_size, num_keypoints, dtype=torch.bool)
+
+        visible_mask = visibility
+
+    # Compute Euclidean distances
     distances = torch.norm(pred_xy - true_xy, dim=-1)
+    
+    # Move to CUDA 
+    device = distances.device
+    visible_mask = visible_mask.to(device)
 
     # Count correct keypoints within the threshold
-    visible_mask = visibility > 0  # Boolean mask where visibility == 1
-
     correct_keypoints = ((distances < threshold) & visible_mask).sum().item()
     total_visible_keypoints = visible_mask.sum().item()
 
@@ -35,10 +58,6 @@ def calculate_keypoint_accuracy(predicted_keypoints, true_keypoints, threshold=0
     return accuracy
 
 def calculate_bbox_accuracy(predicted_boxes, true_boxes, threshold=0.8):
-
-    # [batch_size, 1, 4] -> [batch_size, 4]
-    #predicted_boxes = predicted_boxes.squeeze(1)
-    #true_boxes = true_boxes.squeeze(1)
 
     # Get the coordinates of bounding boxes
     x1 = torch.max(predicted_boxes[:, 0], true_boxes[:, 0])
@@ -60,6 +79,6 @@ def calculate_bbox_accuracy(predicted_boxes, true_boxes, threshold=0.8):
     correct_boxes = (iou > threshold).sum().item()
     total_boxes = len(iou)
 
-     # Calculate accuracy
+    # Calculate accuracy
     accuracy = correct_boxes / total_boxes
     return accuracy

@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 class WorkoutDataset(Dataset):
-    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to=[480,360]):
+    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to=[480,360], transform=None):
 
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
@@ -15,6 +15,8 @@ class WorkoutDataset(Dataset):
         # Create a class-to-index mapping
         self.class_name_to_idx = {class_name: idx for idx, class_name in enumerate(sorted(set(class_names)))}
         self.num_classes = len(self.class_name_to_idx)
+
+        self.transform = transform
 
     def __len__(self):
         return len(self.image_paths)
@@ -44,9 +46,9 @@ class WorkoutDataset(Dataset):
         bbox = np.array(bbox)
         keypoints = np.array(keypoints)
 
-         # Add visibility flag: If keypoint is (0, 0), set visibility to 0, otherwise set it to 1
-        visibility = np.ones((keypoints.shape[0], 1))  # Start with visibility flag 1 for all
-        visibility[(keypoints[:, 0] == 0) | (keypoints[:, 1] == 0)] = 0  # Set visibility to 0 if (x, y) == (0, 0)
+        # Add visibility flag: If keypoint is (0, 0), set visibility to 0, otherwise set it to 1
+        #visibility = np.ones((keypoints.shape[0], 1))  # Start with visibility flag 1 for all
+        #visibility[(keypoints[:, 0] == 0) | (keypoints[:, 1] == 0)] = 0  # Set visibility to 0 if (x, y) == (0, 0)
 
         if scale_w == 1.0 and scale_h == 1.0:
             padded_image = image
@@ -81,13 +83,13 @@ class WorkoutDataset(Dataset):
                 keypoints /= [target_w, target_h]
 
                 # Set keypoints to (0, 0) if visibility is 0 after padding and normalization (for consistency)
-                for i in range(len(visibility)):
-                    if visibility[i] == 0:  # If visibility is 0
-                        keypoints[i] = [0.0, 0.0]
+                #for i in range(len(visibility)):
+                   #if visibility[i] == 0:  # If visibility is 0
+                        #keypoints[i] = [0.0, 0.0]
 
 
         # Stack the visibility flag with the keypoints
-        keypoints = np.column_stack([keypoints, visibility])  # Add visibility as the third dimension
+        #keypoints = np.column_stack([keypoints, visibility])  # Add visibility as the third dimension
 
         # Convert to tensors
         image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
