@@ -2,9 +2,14 @@ from torch.utils.data import Dataset
 import cv2
 import torch
 import numpy as np
+from PIL import Image
 
 class WorkoutDataset(Dataset):
-    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to=[480,360], transform=None):
+<<<<<<< HEAD
+    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to, transform=None):
+=======
+    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to):
+>>>>>>> fabfb14ba14db6750609723c96fbcdd4d66e0f5a
 
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
@@ -13,7 +18,7 @@ class WorkoutDataset(Dataset):
         self.resize_to = resize_to
 
         # Create a class-to-index mapping
-        self.class_name_to_idx = {class_name: idx for idx, class_name in enumerate(sorted(set(class_names)))}
+        self.class_name_to_idx = {class_name: idx for idx, class_name in enumerate(set(class_names))}
         self.num_classes = len(self.class_name_to_idx)
 
         self.transform = transform
@@ -31,10 +36,9 @@ class WorkoutDataset(Dataset):
         class_label = self.class_name_to_idx[class_name]
         
         # Load the image
-        image = cv2.imread(image_filename)
-        if image is None:
-            raise FileNotFoundError(f"Image not found: {image_filename}")
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = Image.open(image_filename).convert("RGB")
+        image = image.resize(self.resize_to)
+        image = np.array(image)
 
         # Get original dimensions
         h, w, _ = image.shape
