@@ -69,8 +69,7 @@ class resnet_with_heads(nn.Module):
             nn.Flatten(),  
             nn.Linear(self.input_size , self.input_size),
             nn.ReLU(),
-            #nn.Linear(self.input_size, num_keypoints * 3)
-            nn.Linear(self.input_size, num_keypoints * 2) # without visibility / confidence
+            nn.Linear(self.input_size, num_keypoints * 3)
         )
 
         self.workout_label_head = nn.Sequential(
@@ -90,8 +89,7 @@ class resnet_with_heads(nn.Module):
         bbox = self.bbox_head(x)
 
         # keypoints head, [batch_size, num_keypoints, 3]
-        #keypoints = self.keypoints_head(x).view(-1, self.num_keypoints, 3)
-        keypoints = self.keypoints_head(x).view(-1, self.num_keypoints, 2) # without visibility / confidence
+        keypoints = self.keypoints_head(x).view(-1, self.num_keypoints, 3)
         keypoints = torch.sigmoid(keypoints)  
 #
         # workout label head, [batch_size, num_classes]

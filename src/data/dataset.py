@@ -5,12 +5,7 @@ import numpy as np
 from PIL import Image
 
 class WorkoutDataset(Dataset):
-<<<<<<< HEAD
     def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to, transform=None):
-=======
-    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to):
->>>>>>> fabfb14ba14db6750609723c96fbcdd4d66e0f5a
-
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
         self.keypoints = keypoints
@@ -50,10 +45,6 @@ class WorkoutDataset(Dataset):
         bbox = np.array(bbox)
         keypoints = np.array(keypoints)
 
-        # Add visibility flag: If keypoint is (0, 0), set visibility to 0, otherwise set it to 1
-        #visibility = np.ones((keypoints.shape[0], 1))  # Start with visibility flag 1 for all
-        #visibility[(keypoints[:, 0] == 0) | (keypoints[:, 1] == 0)] = 0  # Set visibility to 0 if (x, y) == (0, 0)
-
         if scale_w == 1.0 and scale_h == 1.0:
             padded_image = image
         else:
@@ -85,12 +76,6 @@ class WorkoutDataset(Dataset):
                 # Normalized to 0,1
                 bbox = bbox / [target_w, target_h, target_w, target_h]
                 keypoints /= [target_w, target_h]
-
-                # Set keypoints to (0, 0) if visibility is 0 after padding and normalization (for consistency)
-                #for i in range(len(visibility)):
-                   #if visibility[i] == 0:  # If visibility is 0
-                        #keypoints[i] = [0.0, 0.0]
-
 
         # Stack the visibility flag with the keypoints
         #keypoints = np.column_stack([keypoints, visibility])  # Add visibility as the third dimension
