@@ -12,7 +12,7 @@ from torchvision import transforms
 
 # Load your model (replace with your actual model)
 model = resnet_with_heads(num_classes=22, num_keypoints=17, backbone='resnet50')
-state_dict = torch.load('checkpoints/model_epoch_30.pth', map_location=torch.device('cpu'))
+state_dict = torch.load('checkpoints/model_epoch_1.pth', map_location=torch.device('cpu'))
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -82,11 +82,11 @@ while cap.isOpened():
     # Draw the keypoints (keypoints_pred should be a tensor with shape [num_keypoints, 2] for x, y)
     keypoints_pred = keypoints_pred[0]
 
-    if keypoints_pred.shape[-1] == 3:  # If the keypoints have x, y, visibility
+    if keypoints_pred.shape[-1] == 3:  # If the keypoints have x, y, confidence
             for i, point in enumerate(keypoints_pred):
-                x, y, visibility = point
+                x, y, confidence = point
                 # Check if the keypoint is visible and within the bounding box
-                if visibility > 0 and x_min <= x <= x_max and y_min <= y <= y_max:
+                if confidence > 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
                     # Draw the keypoint
                     cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
                     # Draw the index number next to the keypoint
@@ -107,7 +107,7 @@ while cap.isOpened():
     # Draw the skeleton by connecting the keypoints
     for pair in SKELETON:
         i, j = pair
-            # Check if keypoints have 3 values (x, y, visibility) or just 2 (x, y)
+            # Check if keypoints have 3 values (x, y, confidence) or just 2 (x, y)
         if keypoints_pred.shape[-1] == 3:
             x1, y1, _ = keypoints_pred[i]  # Unpacking 3 values
             x2, y2, _ = keypoints_pred[j]
