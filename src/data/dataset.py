@@ -5,7 +5,11 @@ import numpy as np
 from PIL import Image
 
 class WorkoutDataset(Dataset):
+<<<<<<< HEAD
     def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to, transform=None):
+=======
+    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to):
+>>>>>>> fabfb14ba14db6750609723c96fbcdd4d66e0f5a
 
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes

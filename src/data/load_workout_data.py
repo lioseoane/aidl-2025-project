@@ -3,7 +3,11 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image
 
+<<<<<<< HEAD
 def load_workout_data(image_dir="workout_dataset/images", annotation_dir="workout_dataset/labels"):
+=======
+def load_workout_data(image_dir="C:/Users/super/Desktop/AIHL_project/aidl-2025-project/workout_dataset/images", annotation_dir="C:/Users/super/Desktop/AIHL_project/aidl-2025-project/workout_dataset/labels"):
+>>>>>>> fabfb14ba14db6750609723c96fbcdd4d66e0f5a
     # Hardcoded paths
     image_dir = image_dir
     annotation_dir = annotation_dir
