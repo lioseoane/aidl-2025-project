@@ -33,8 +33,10 @@ def create_dataloaders(image_paths, bounding_boxes, keypoints, class_names, batc
     ])
 
     # Initialize the datasets for both training and validation sets
-    train_dataset = WorkoutDataset(train_image_paths, train_bounding_boxes, train_keypoints, train_class_names, resize_to=resize_to, transform=transforms_resnet50)
-    val_dataset = WorkoutDataset(val_image_paths, val_bounding_boxes, val_keypoints, val_class_names, resize_to=resize_to, transform=transforms_resnet50)
+    train_dataset = WorkoutDataset(train_image_paths, train_bounding_boxes, train_keypoints, train_class_names, resize_to=resize_to, 
+                                   transform=transforms_resnet50)
+    val_dataset = WorkoutDataset(val_image_paths, val_bounding_boxes, val_keypoints, val_class_names, resize_to=resize_to, 
+                                 transform=transforms_resnet50, class_name_to_idx=train_dataset.class_name_to_idx)
 
     # Create the DataLoader instances for both datasets
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

@@ -121,7 +121,10 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
             # Visualize predictions and targets for each epoch at batch 1 for the first 5 images
             if batch_idx == 0:
-                for i in range(4):
+                batch_size = images.shape[0]  # Get batch size
+                random_indices = torch.randperm(batch_size)[:8]  # Randomly pick 4 indices
+
+                for i, idx in enumerate(random_indices):
 
                     sample_image = images[i].cpu().detach().numpy() # Unfortunetely numpy doesn't work in CUDA
                     

@@ -4,7 +4,7 @@ import matplotlib.patches as patches
 from PIL import Image
 
 
-def load_workout_data(image_dir="workout_dataset/images", annotation_dir="workout_dataset/new_labels"):
+def load_workout_data(image_dir="workout_dataset/new_images", annotation_dir="workout_dataset/new_labels"):
     # Hardcoded paths
     image_dir = image_dir
     annotation_dir = annotation_dir
