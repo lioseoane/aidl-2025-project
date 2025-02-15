@@ -1,11 +1,13 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import cv2
 import shutil
 from ultralytics import YOLO
 
-IMAGE_DIR = "../workout_dataset/images"   # Path to your images
-NEW_IMAGE_DIR = "../workout_dataset/images/all"
-LABEL_DIR = "../workout_dataset/new_labels"   # Where .txt annotation files will be saved
+IMAGE_DIR = "workout_dataset/new_images"   # Path to your images
+LABEL_DIR = "workout_dataset/new_labels"   # Where .txt annotation files will be saved
 MODEL_PATH = "yolo11x-pose.pt"
 CLASS_ID = 0                           # For YOLO, person is often '0' if single class
 
