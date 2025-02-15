@@ -3,7 +3,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from src.utils.visualization import visualize_keypoints
 from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy
-
+from torch.cuda.amp import autocast, GradScaler
 
 def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs", num_epoch=0):
 
@@ -15,7 +15,7 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
     idx_to_class_name = {idx: class_name for class_name, idx in class_name_to_idx.items()}  # Reverse the mapping
 
     # Initialize TensorBoard writer
-    writer = SummaryWriter(log_dir=log_dir)
+    writer = SummaryWriter(log_dir=f'{log_dir}/{model.model_label}')
 
     # Set model to evaluation mode
     model.eval()
@@ -47,24 +47,37 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             # Move targets to the same device as the model
             # List range from 0 to batch size
             new_targets = []
-            for i in range(len(targets["bbox"])):  # Iterating over the batch size (64)
-                new_targets.append({
-                    "bbox": targets["bbox"][i].to(device),  # Bounding box for image i
-                    "workout_label": targets["workout_label"][i].to(device),  # Class label for image i
-                    "keypoints": targets["keypoints"][i].to(device),  # Keypoints for image i
-                })
+            for i in range(len(targets["boxes"])):  # Iterating over the batch size (64)
 
-            # Forward pass
-            output = model(images) 
-            losses = model.compute_losses(output, new_targets)
+                if model.model_label == 'resnet50':
+                    new_targets.append({
+                        "boxes": targets["boxes"][i].to(device),  # Bounding box for image i
+                        "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
+                        "keypoints": targets["keypoints"][i].to(device),  # Keypoints for image i
+                    })
+
+                elif model.model_label == 'keypoint-rcnn':
+                    new_targets.append({
+                        "boxes": targets["boxes"][i].unsqueeze(0).to(device), # Shape: [1, 4]
+                        "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
+                        "keypoints": targets["keypoints"][i].unsqueeze(0).to(device),  # Shape: [1, 17, 3]
+                        "labels": targets["labels"][i].to(device),  # 0 background, 1 person
+                    })
+
+            # Forward pass and Losses
+            with autocast():  # Automatically uses FP16 where it can
+                output = model(images) 
+                keypoints_loss, boxes_loss, classification_loss = model.compute_losses(output, new_targets, val=True) # Losses
+
             loss_dict = {
-                "classification_loss": losses[2],
-                "bbox_loss": losses[0],
-                "keypoint_loss": losses[1],
+                "classification_loss": classification_loss,
+                "boxes_loss": boxes_loss,
+                "keypoints_loss": keypoints_loss,
             }
+
             classification_loss = loss_dict["classification_loss"]
-            keypoint_loss = loss_dict["keypoint_loss"]
-            bbox_loss = loss_dict["bbox_loss"]
+            keypoint_loss = loss_dict["keypoints_loss"]
+            bbox_loss = loss_dict["boxes_loss"]
 
             total_loss = classification_loss + keypoint_loss + bbox_loss
 
@@ -73,11 +86,15 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             val_bbox_loss += bbox_loss.item()
             val_loss += total_loss.item()
 
-             # Calculate overall accuracy for the epoch
-            bbox, keypoints, workout_label = output
+            # Calculate overall accuracy for the epoch
+            if model.model_label == 'resnet50':
+                bbox, keypoints, workout_label = output
+            elif model.model_label == 'keypoint-rcnn':
+                model.eval()
+                bbox, keypoints, workout_label = model(images)
 
             # Calculate and accumulate accuracy metrics
-            workout_label_targets = torch.stack([target['workout_label'] for target in new_targets]) 
+            workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
             class_accuracy, batch_TP, batch_FP, batch_FN = calculate_classification_accuracy(workout_label, 
                                                                                               workout_label_targets, 
                                                                                               len(idx_to_class_name))
@@ -87,23 +104,23 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             total_classification_FP += batch_FP
             total_classification_FN += batch_FN
 
-            # Calculate bbox and keypoint accuracy
-            bbox_targets = torch.stack([target['bbox'] for target in new_targets]) 
+            # Calculate bbox accuracy
+            if model.model_label == 'resnet50':
+                bbox_targets = torch.stack([target['boxes'] for target in new_targets])
+            elif model.model_label == 'keypoint-rcnn':
+                bbox_targets = torch.stack([target['boxes'] for target in new_targets]).squeeze(1)
             bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
             total_bbox_correct += bbox_accuracy * len(bbox_targets)
             total_bbox_count += len(bbox_targets)
 
             # Calculate keypoint accuracy
-            keypoints_targets = torch.stack([target['keypoints'] for target in new_targets]) 
+            if model.model_label == 'resnet50':
+                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
+            elif model.model_label == 'keypoint-rcnn':
+                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets]).squeeze(1)
             keypoints_accuracy = calculate_keypoint_accuracy(keypoints, keypoints_targets)
             total_keypoints_correct += keypoints_accuracy * len(keypoints_targets)
             total_keypoints_count += len(keypoints_targets) 
-
-            # Log batch loss to TensorBoard
-            #writer.add_scalar("Validation_Batch_Loss/Keypoint", keypoint_loss.item(), batch_idx)
-            #writer.add_scalar("Validation_Batch_Loss/BBox", bbox_loss.item(), batch_idx)
-            #writer.add_scalar("Validation_Batch_Loss/Classification", classification_loss.item(), batch_idx)
-            #writer.add_scalar("Validation_Batch_Loss/Total", total_loss.item(), batch_idx)
 
             # Visualize predictions and targets for each epoch at batch 1 for the first 5 images
             if batch_idx == 0:

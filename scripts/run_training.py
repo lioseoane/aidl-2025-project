@@ -13,16 +13,24 @@ keypoints_array, images_array, bounding_boxes_array, classes_array = load_workou
 
 # Create dataloaders
 train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, bounding_boxes_array, keypoints_array, 
-                                                                 classes_array, batch_size=64, resize_to=[224,224])
+                                                                 classes_array, batch_size=8, resize_to=[224, 224])
+
+# Limit the training data to 1% --> To test any arquitecture across the whole enviroment
+#train_loader = torch.utils.data.Subset(train_loader.dataset, range(int(len(train_loader.dataset) * 0.01)))
+#train_loader = torch.utils.data.DataLoader(train_loader, batch_size=8, shuffle=True)  # Re-create DataLoader for the subset
+#val_loader = torch.utils.data.Subset(val_loader.dataset, range(int(len(val_loader.dataset) * 0.01)))
+#val_loader = torch.utils.data.DataLoader(val_loader, batch_size=8, shuffle=True)  # Re-create DataLoader for the subset
+
 
 # Initialize model, optimizer, and loss function
 num_classes = len(set(classes_array)) 
 num_keypoints = 17
-model = resnet_with_heads(num_classes=num_classes, num_keypoints=num_keypoints, backbone='resnet50')
+model_type = 'keypoint-rcnn'
+model = resnet_with_heads(num_classes=num_classes, num_keypoints=num_keypoints, model=model_type)
 
 # Train the model
-train_model(train_loader, model, class_name_to_idx, num_epochs=75, val_loader=val_loader)
+train_model(train_loader, model, class_name_to_idx, num_epochs=50, val_loader=val_loader)
 
 # Save the trained model
-model_save_path = './resnet50.pth'  # Specify the path to save the model
+model_save_path = f'./{model_type}.pth'  # Specify the path to save the model
 torch.save(model.state_dict(), model_save_path)
