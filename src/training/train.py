@@ -7,10 +7,14 @@ from torch.utils.tensorboard import SummaryWriter
 from src.utils.visualization import visualize_keypoints
 from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy
 from src.training.evaluate import evaluate_model
+from torch.cuda.amp import autocast, GradScaler
 
 
 def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="logs/train_logs", 
                 checkpoint_dir="checkpoints", val_loader=None):
+
+    # Clear cache
+    torch.cuda.empty_cache()
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3)  # Initialize optimizer
 
@@ -24,6 +28,9 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
     writer = SummaryWriter(log_dir=log_dir) # Initialize TensorBoard writer
 
     os.makedirs(checkpoint_dir, exist_ok=True) # Create checkpoint directory
+
+    # Initialize GradScaler for mixed precision
+    scaler = GradScaler()
 
     for epoch in range(num_epochs):
         model.train()  # Set model to training mode
@@ -53,34 +60,50 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
             # Move targets to the same device as the model
             # List range from 0 to batch size
             new_targets = []
-            for i in range(len(targets["bbox"])):  # Iterating over the batch size (64)
-                new_targets.append({
-                    "bbox": targets["bbox"][i].to(device),  # Bounding box for image i
-                    "workout_label": targets["workout_label"][i].to(device),  # Class label for image i
-                    "keypoints": targets["keypoints"][i].to(device),  # Keypoints for image i
-                })
+            for i in range(len(targets["boxes"])):  # Iterating over the batch size (64)
 
+                if model.model_label == 'resnet50':
+                    new_targets.append({
+                        "boxes": targets["boxes"][i].to(device),  # Bounding box for image i
+                        "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
+                        "keypoints": targets["keypoints"][i].to(device),  # Keypoints for image i
+                    })
+
+                elif model.model_label == 'keypoint-rcnn':
+                    new_targets.append({
+                        "boxes": targets["boxes"][i].unsqueeze(0).to(device), # Shape: [1, 4]
+                        "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
+                        "keypoints": targets["keypoints"][i].unsqueeze(0).to(device),  # Shape: [1, 17, 3]
+                        "labels": targets["labels"][i].to(device),  # 0 background, 1 person
+                    })
+                
             optimizer.zero_grad()  # Zero the gradients before backward pass
 
-            # Forward pass
-            output = model(images) 
+            # Forward pass and Losses
+            with autocast():  # Automatically uses FP16 where it can
+                if model.model_label == 'resnet50':
+                    output = model(images) 
+                    keypoints_loss, boxes_loss, classification_loss = model.compute_losses(output, new_targets) # Losses
 
-            # Losses
-            losses = model.compute_losses(output, new_targets)
+                elif model.model_label == 'keypoint-rcnn':
+                    keypoints_loss, boxes_loss, classification_loss = model(images, new_targets) # Losses
+
             loss_dict = {
-                "classification_loss": losses[2],
-                "bbox_loss": losses[0],
-                "keypoint_loss": losses[1],
+                "classification_loss": classification_loss,
+                "boxes_loss": boxes_loss,
+                "keypoints_loss": keypoints_loss,
             }
+
             classification_loss = loss_dict["classification_loss"]
-            keypoint_loss = loss_dict["keypoint_loss"]
-            bbox_loss = loss_dict["bbox_loss"]
+            keypoint_loss = loss_dict["keypoints_loss"]
+            bbox_loss = loss_dict["boxes_loss"]
 
             total_loss = classification_loss + keypoint_loss + bbox_loss
 
-            total_loss.backward()  # Backpropagate the loss
+            scaler.scale(total_loss).backward()  # Backpropagate the loss (with scaled gradients)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
-            optimizer.step()  # Update model weights
+            scaler.step(optimizer)  # Update model weights
+            scaler.update()  # Update the scale for next iteration
 
             running_classification_loss += classification_loss.item()
             running_keypoint_loss += keypoint_loss.item()
@@ -88,10 +111,14 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
             running_loss += total_loss.item()  # Accumulate loss for averaging
 
             # Calculate overall accuracy for the epoch
-            bbox, keypoints, workout_label = output
+            if model.model_label == 'resnet50':
+                bbox, keypoints, workout_label = output
+            elif model.model_label == 'keypoint-rcnn':
+                model.eval()
+                bbox, keypoints, workout_label = model(images)
 
             # Calculate and accumulate accuracy metrics
-            workout_label_targets = torch.stack([target['workout_label'] for target in new_targets]) 
+            workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
             class_accuracy, batch_TP, batch_FP, batch_FN = calculate_classification_accuracy(workout_label, 
                                                                                               workout_label_targets, 
                                                                                               len(idx_to_class_name))
@@ -102,13 +129,21 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
             total_classification_FN += batch_FN
 
             # Calculate bbox accuracy
-            bbox_targets = torch.stack([target['bbox'] for target in new_targets]) 
+            if model.model_label == 'resnet50':
+                bbox_targets = torch.stack([target['boxes'] for target in new_targets])
+            elif model.model_label == 'keypoint-rcnn':
+                bbox_targets = torch.stack([target['boxes'] for target in new_targets]).squeeze(1)
+            
             bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
             total_bbox_correct += bbox_accuracy * len(bbox_targets)
             total_bbox_count += len(bbox_targets)
 
             # Calculate keypoint accuracy
-            keypoints_targets = torch.stack([target['keypoints'] for target in new_targets]) 
+            if model.model_label == 'resnet50':
+                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
+            elif model.model_label == 'keypoint-rcnn':
+                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets]).squeeze(1)
+
             keypoints_accuracy = calculate_keypoint_accuracy(keypoints, keypoints_targets)
             total_keypoints_correct += keypoints_accuracy * len(keypoints_targets)
             total_keypoints_count += len(keypoints_targets) 
@@ -154,6 +189,9 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
                     log_entry = f"Predicted: {predicted_class_name} (Prob: {predicted_prob:.4f})\nTrue: {true_class_name}"
                     writer.add_text(f"Classification/Image_{i}", log_entry, epoch)
+
+            if model.model_label == 'keypoint-rcnn':
+                model.train()
 
         # Compute epoch loss and log it
         epoch_classification_loss = running_classification_loss / len(train_loader)

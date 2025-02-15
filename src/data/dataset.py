@@ -17,7 +17,7 @@ class WorkoutDataset(Dataset):
             self.class_name_to_idx = class_name_to_idx
         else:
             self.class_name_to_idx = {class_name: idx for idx, class_name in enumerate(set(class_names))}
-            
+
         self.num_classes = len(self.class_name_to_idx)
 
         self.transform = transform
@@ -93,13 +93,13 @@ class WorkoutDataset(Dataset):
         if class_label >= 0:  # Only assign if the class label is valid
             class_label_one_hot[class_label] = 1
 
-
         # Create the target dictionary
         target = {}
-        target['bbox'] = bbox_tensor
-        target['workout_label'] = class_label_one_hot  
+        target['boxes'] = bbox_tensor
+        target['labels'] = torch.tensor([1], dtype=torch.int64)
+        target['workout_labels'] = class_label_one_hot  
         target['keypoints'] = keypoints_tensor
-        target['filename'] = image_filename
-        target['workout_label_name'] = class_name
+        target['filenames'] = image_filename
+        target['workout_label_names'] = class_name
 
         return image_tensor, target
