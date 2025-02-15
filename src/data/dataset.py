@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 
 class WorkoutDataset(Dataset):
-    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to, transform=None):
+    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to, transform=None, class_name_to_idx=None):
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
         self.keypoints = keypoints
@@ -13,7 +13,11 @@ class WorkoutDataset(Dataset):
         self.resize_to = resize_to
 
         # Create a class-to-index mapping
-        self.class_name_to_idx = {class_name: idx for idx, class_name in enumerate(set(class_names))}
+        if class_name_to_idx:
+            self.class_name_to_idx = class_name_to_idx
+        else:
+            self.class_name_to_idx = {class_name: idx for idx, class_name in enumerate(set(class_names))}
+            
         self.num_classes = len(self.class_name_to_idx)
 
         self.transform = transform

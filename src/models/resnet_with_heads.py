@@ -103,14 +103,14 @@ class resnet_with_heads(nn.Module):
         keypoints_targets = torch.stack([target['keypoints'] for target in targets]) 
         workout_label_targets = torch.stack([target['workout_label'] for target in targets]) 
 
-        # Check if visibility is included (i.e., check if the 3rd dimension exists)
-        use_visibility_mask = keypoints_targets.shape[-1] == 3
+        # Confidence scores boolean
+        use_confience_scores = keypoints_targets.shape[-1] == 3
 
-        # If visibility exists, the 3rd dimension should be `2` for the keypoints (x, y) and `3` for the mask (x, y, visibility)
-        if use_visibility_mask:
-            visibility_mask = keypoints_targets[:, :, 2]
+        # If confidence scores, use it
+        if use_confience_scores:
+            confidence_scores  = keypoints_targets[:, :, 2]
         else:
-            visibility_mask = torch.ones_like(keypoints_targets[:, :, 0])  # If no visibility mask, assume all keypoints are visible
+            confidence_scores = torch.ones_like(keypoints_targets[:, :, 0])  # If no confidence socres, assume all keypoints are visible
 
         # Compute the bounding box loss
         bbox_loss = nn.MSELoss()(outputs[0], bbox_targets)
@@ -119,8 +119,8 @@ class resnet_with_heads(nn.Module):
         keypoints_loss = nn.MSELoss(reduction='none')(outputs[1][:, :, :2], keypoints_targets[:, :, :2])
         
         # Apply visibility mask if available (ignores keypoints where visibility = 0)
-        keypoints_loss = keypoints_loss * visibility_mask.unsqueeze(-1)  # Keep shape (B, num_keypoints, 2)
-        keypoints_loss = keypoints_loss.sum() / visibility_mask.sum().clamp(min=1)
+        keypoints_loss = keypoints_loss * confidence_scores.unsqueeze(-1)  # Keep shape (B, num_keypoints, 2)
+        keypoints_loss = keypoints_loss.sum() / (confidence_scores.sum() + 1e-6) # Avoid division by 0
 
         # Compute the workout label loss
         workout_label_indices = workout_label_targets.argmax(dim=1)  # Get the index of the target label
