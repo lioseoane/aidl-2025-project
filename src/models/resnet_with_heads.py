@@ -143,12 +143,11 @@ class resnet_with_heads(nn.Module):
                 workout_label_loss = self.compute_losses(workout_label, new_targets)
                 return loss_dict['loss_box_reg'], loss_dict['loss_keypoint'], workout_label_loss
 
-            else:
+            else: # Inference mode
 
                 image_list = ImageList(x, [(image.shape[1], image.shape[2]) for image in x])
                 image_sizes = image_list.image_sizes 
 
-                # Inference mode
                 features = self.model.backbone(x)
                 proposals, _ = self.model.rpn(image_list, features)
                 results = self.model.roi_heads(features, proposals, image_sizes)
@@ -242,6 +241,7 @@ class resnet_with_heads(nn.Module):
             return bbox_loss, keypoints_loss, workout_label_loss
         
         elif self.model_label == 'keypoint-rcnn':
+            # We only calculate the loss for the workout classifier because we will use the build-in loss for the keypoints and bbox
 
             workout_label_targets = torch.stack([target['workout_labels'] for target in targets]) 
 

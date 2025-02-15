@@ -25,7 +25,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
     model = model.to(device) # Move model to the same device as the data
     print(f"Using device: {device}")
 
-    writer = SummaryWriter(log_dir=log_dir) # Initialize TensorBoard writer
+    writer = SummaryWriter(log_dir=f'{log_dir}/{model.model_label}') # Initialize TensorBoard writer
 
     os.makedirs(checkpoint_dir, exist_ok=True) # Create checkpoint directory
 

@@ -15,7 +15,7 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
     idx_to_class_name = {idx: class_name for class_name, idx in class_name_to_idx.items()}  # Reverse the mapping
 
     # Initialize TensorBoard writer
-    writer = SummaryWriter(log_dir=log_dir)
+    writer = SummaryWriter(log_dir=f'{log_dir}/{model.model_label}')
 
     # Set model to evaluation mode
     model.eval()
