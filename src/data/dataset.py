@@ -50,7 +50,7 @@ class WorkoutDataset(Dataset):
         keypoints = np.array(keypoints)
 
         if scale_w == 1.0 and scale_h == 1.0:
-            padded_image = image
+            pass
         else:
             scale = min(scale_w, scale_h)
             new_w, new_h = int(w * scale), int(h * scale)
@@ -92,6 +92,7 @@ class WorkoutDataset(Dataset):
         class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)
         if class_label >= 0:  # Only assign if the class label is valid
             class_label_one_hot[class_label] = 1
+
 
         # Create the target dictionary
         target = {}

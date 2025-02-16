@@ -125,7 +125,7 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             # Visualize predictions and targets for each epoch at batch 1 for the first 5 images
             if batch_idx == 0:
                 
-                for i in range(8):
+                for i in range(4):
 
                     sample_image = images[i].cpu().detach().numpy() # Unfortunetely numpy doesn't work in CUDA
                     

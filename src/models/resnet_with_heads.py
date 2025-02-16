@@ -50,8 +50,10 @@ class resnet_with_heads(nn.Module):
         elif self.model_label == 'keypoint-rcnn':
             self.model = torchvision.models.detection.keypointrcnn_resnet50_fpn(
                 weights= KeypointRCNN_ResNet50_FPN_Weights.DEFAULT,
+                weights_backbone = ResNet50_Weights.IMAGENET1K_V1,
                 num_keypoints= self.num_keypoints,
-                num_classes = 2)
+                num_classes = 2,
+                trainable_backbone_layers = 0)
             
             self.in_features = self.model.roi_heads.box_predictor.cls_score.in_features
             self.model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(self.in_features, 2)
@@ -110,14 +112,15 @@ class resnet_with_heads(nn.Module):
 
                     denorm_boxes = norm_boxes.clone()  # Clone the original normalized boxes
                     denorm_boxes[:, [0, 2]] = denorm_boxes[:, [0, 2]] * image_width  # Denormalize xmin, xmax
-                    denorm_boxes[:, [1, 3]] = denorm_boxes[:, [1, 3]] * image_height  # Denormalize ymin, ymax
+                    denorm_boxes[:, [1, 3]] = denorm_boxes[:, [1, 3]] * image_height  # Denormalize ymin, ymax)
                     denormalized_bbox.append(denorm_boxes)
 
                     denorm_keypoints = norm_keypoints.clone()  # Clone the original normalized keypoints
                     denorm_keypoints[..., 0] = denorm_keypoints[..., 0] * image_width  # Denormalize x (multiply by width)
                     denorm_keypoints[..., 1] = denorm_keypoints[..., 1] * image_height  # Denormalize y (multiply by height)
+                    # visibility binary expected
+                    denorm_keypoints[..., 2] = torch.where(denorm_keypoints[..., 2] < 0.3, 0, 1)
                     denormalized_keypoints.append(denorm_keypoints)
-
 
                 # After denormalizing the boxes and keypoints, create the new targets
                 new_targets = []
@@ -224,6 +227,9 @@ class resnet_with_heads(nn.Module):
             else:
                 confidence_scores = torch.ones_like(keypoints_targets[:, :, 0])  # If no confidence socres, assume all keypoints are visible
 
+            # Convert confidence scores to visibility mask (0 = ignore, 1 = include)
+            visibility_mask = (confidence_scores > 0.3).float()  # If confidence > 0.3, include in loss
+
             # Compute the bounding box loss
             bbox_loss = nn.MSELoss()(outputs[0], bbox_targets)
 
@@ -231,8 +237,8 @@ class resnet_with_heads(nn.Module):
             keypoints_loss = nn.MSELoss(reduction='none')(outputs[1][:, :, :2], keypoints_targets[:, :, :2])
             
             # Apply visibility mask if available (ignores keypoints where visibility = 0)
-            keypoints_loss = keypoints_loss * confidence_scores.unsqueeze(-1)  # Keep shape (B, num_keypoints, 2)
-            keypoints_loss = keypoints_loss.sum() / (confidence_scores.sum() + 1e-6) # Avoid division by 0
+            keypoints_loss = keypoints_loss * visibility_mask.unsqueeze(-1)  # Keep shape (B, num_keypoints, 2)
+            keypoints_loss = keypoints_loss.sum() / (visibility_mask.sum() + 1e-6) # Avoid division by 0
 
             # Compute the workout label loss
             workout_label_indices = workout_label_targets.argmax(dim=1)  # Get the index of the target label
