@@ -16,7 +16,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
     # Clear cache
     torch.cuda.empty_cache()
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)  # Initialize optimizer
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)  # Initialize optimizer
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
 
@@ -110,88 +110,89 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
             running_bbox_loss += bbox_loss.item()
             running_loss += total_loss.item()  # Accumulate loss for averaging
 
-            # Calculate overall accuracy for the epoch
-            if model.model_label == 'resnet50':
-                bbox, keypoints, workout_label = output
-            elif model.model_label == 'keypoint-rcnn':
-                model.eval()
-                bbox, keypoints, workout_label = model(images)
 
-            # Calculate and accumulate accuracy metrics
-            workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
-            class_accuracy, batch_TP, batch_FP, batch_FN = calculate_classification_accuracy(workout_label, 
-                                                                                              workout_label_targets, 
-                                                                                              len(idx_to_class_name))
-            total_classification_correct += class_accuracy * len(workout_label_targets)
-            total_classification_count += len(workout_label_targets)
-            total_classification_TP += batch_TP
-            total_classification_FP += batch_FP
-            total_classification_FN += batch_FN
+            model.eval()
+            with torch.no_grad():
+                # Calculate overall accuracy for the epoch
+                if model.model_label == 'resnet50':
+                    bbox, keypoints, workout_label = output
+                elif model.model_label == 'keypoint-rcnn':
+                    bbox, keypoints, workout_label = model(images)
 
-            # Calculate bbox accuracy
-            if model.model_label == 'resnet50':
-                bbox_targets = torch.stack([target['boxes'] for target in new_targets])
-            elif model.model_label == 'keypoint-rcnn':
-                bbox_targets = torch.stack([target['boxes'] for target in new_targets]).squeeze(1)
-            
-            bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
-            total_bbox_correct += bbox_accuracy * len(bbox_targets)
-            total_bbox_count += len(bbox_targets)
+                # Calculate and accumulate accuracy metrics
+                workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
+                class_accuracy, batch_TP, batch_FP, batch_FN = calculate_classification_accuracy(workout_label, 
+                                                                                                workout_label_targets, 
+                                                                                                len(idx_to_class_name))
+                total_classification_correct += class_accuracy * len(workout_label_targets)
+                total_classification_count += len(workout_label_targets)
+                total_classification_TP += batch_TP
+                total_classification_FP += batch_FP
+                total_classification_FN += batch_FN
 
-            # Calculate keypoint accuracy
-            if model.model_label == 'resnet50':
-                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
-            elif model.model_label == 'keypoint-rcnn':
-                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets]).squeeze(1)
+                # Calculate bbox accuracy
+                if model.model_label == 'resnet50':
+                    bbox_targets = torch.stack([target['boxes'] for target in new_targets])
+                elif model.model_label == 'keypoint-rcnn':
+                    bbox_targets = torch.stack([target['boxes'] for target in new_targets]).squeeze(1)
+                
+                bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
+                total_bbox_correct += bbox_accuracy * len(bbox_targets)
+                total_bbox_count += len(bbox_targets)
 
-            keypoints_accuracy = calculate_keypoint_accuracy(keypoints, keypoints_targets)
-            total_keypoints_correct += keypoints_accuracy * len(keypoints_targets)
-            total_keypoints_count += len(keypoints_targets) 
+                # Calculate keypoint accuracy
+                if model.model_label == 'resnet50':
+                    keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
+                elif model.model_label == 'keypoint-rcnn':
+                    keypoints_targets = torch.stack([target['keypoints'] for target in new_targets]).squeeze(1)
 
-            # Log batch loss to TensorBoard
-            writer.add_scalar("Batch_Loss/Classification", classification_loss.item(), epoch * len(train_loader) + batch_idx)
-            writer.add_scalar("Batch_Loss/Keypoint", keypoint_loss.item(), epoch * len(train_loader) + batch_idx)
-            writer.add_scalar("Batch_Loss/BBox", bbox_loss.item(), epoch * len(train_loader) + batch_idx)
-            writer.add_scalar("Batch_Loss/Total", total_loss.item(), epoch * len(train_loader) + batch_idx)
+                keypoints_accuracy = calculate_keypoint_accuracy(keypoints, keypoints_targets)
+                total_keypoints_correct += keypoints_accuracy * len(keypoints_targets)
+                total_keypoints_count += len(keypoints_targets) 
 
-            # Visualize predictions and targets for each epoch at batch 1 for the first 5 images
-            if batch_idx == 0:
-                batch_size = images.shape[0]  # Get batch size
-                random_indices = torch.randperm(batch_size)[:8]  # Randomly pick 4 indices
+                # Log batch loss to TensorBoard
+                writer.add_scalar("Batch_Loss/Classification", classification_loss.item(), epoch * len(train_loader) + batch_idx)
+                writer.add_scalar("Batch_Loss/Keypoint", keypoint_loss.item(), epoch * len(train_loader) + batch_idx)
+                writer.add_scalar("Batch_Loss/BBox", bbox_loss.item(), epoch * len(train_loader) + batch_idx)
+                writer.add_scalar("Batch_Loss/Total", total_loss.item(), epoch * len(train_loader) + batch_idx)
 
-                for i, idx in enumerate(random_indices):
+                # Visualize predictions and targets for each epoch at batch 1 for the first 5 images
+                if batch_idx == 0:
+                    batch_size = images.shape[0]  # Get batch size
+                    random_indices = torch.randperm(batch_size)[:4]  # Randomly pick 4 indices
 
-                    sample_image = images[i].cpu().detach().numpy() # Unfortunetely numpy doesn't work in CUDA
-                    
-                    # Visualize keypoints and bounding boxes
-                    vis_image = visualize_keypoints(
-                        sample_image, 
-                        keypoints[i].cpu().detach().numpy(), 
-                        keypoints_targets[i].cpu().numpy(), 
-                        sample_image.shape[2], 
-                        sample_image.shape[1], 
-                        bbox[i].cpu().detach().numpy(), 
-                        bbox_targets[i].cpu().detach().numpy()
-                    )
+                    for i, idx in enumerate(random_indices):
 
-                    # Log the visualization to TensorBoard
-                    writer.add_image(f'Visualization/Image_{i}', vis_image, epoch)
+                        sample_image = images[i].cpu().detach().numpy() # Unfortunetely numpy doesn't work in CUDA
+                        
+                        # Visualize keypoints and bounding boxes
+                        vis_image = visualize_keypoints(
+                            sample_image, 
+                            keypoints[i].cpu().detach().numpy(), 
+                            keypoints_targets[i].cpu().numpy(), 
+                            sample_image.shape[2], 
+                            sample_image.shape[1], 
+                            bbox[i].cpu().detach().numpy(), 
+                            bbox_targets[i].cpu().detach().numpy()
+                        )
 
-                    # Prediction
-                    log_probs = torch.nn.functional.log_softmax(workout_label[i], dim=0)
-                    predicted_class_index = torch.argmax(log_probs, dim=0)
-                    predicted_class_name = idx_to_class_name[predicted_class_index.item()]
-                    predicted_prob = torch.exp(log_probs[predicted_class_index.item()]).item()
+                        # Log the visualization to TensorBoard
+                        writer.add_image(f'Visualization/Image_{i}', vis_image, epoch)
 
-                    # Ground truth
-                    true_class_index = torch.argmax(workout_label_targets[i], dim=0)
-                    true_class_name = idx_to_class_name[true_class_index.item()]
+                        # Prediction
+                        log_probs = torch.nn.functional.log_softmax(workout_label[i], dim=0)
+                        predicted_class_index = torch.argmax(log_probs, dim=0)
+                        predicted_class_name = idx_to_class_name[predicted_class_index.item()]
+                        predicted_prob = torch.exp(log_probs[predicted_class_index.item()]).item()
 
-                    log_entry = f"Predicted: {predicted_class_name} (Prob: {predicted_prob:.4f})\nTrue: {true_class_name}"
-                    writer.add_text(f"Classification/Image_{i}", log_entry, epoch)
+                        # Ground truth
+                        true_class_index = torch.argmax(workout_label_targets[i], dim=0)
+                        true_class_name = idx_to_class_name[true_class_index.item()]
 
-            if model.model_label == 'keypoint-rcnn':
-                model.train()
+                        log_entry = f"Predicted: {predicted_class_name} (Prob: {predicted_prob:.4f})\nTrue: {true_class_name}"
+                        writer.add_text(f"Classification/Image_{i}", log_entry, epoch)
+
+            model.train()
 
         # Compute epoch loss and log it
         epoch_classification_loss = running_classification_loss / len(train_loader)
