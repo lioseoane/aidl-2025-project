@@ -11,8 +11,8 @@ from src.models.resnet_with_heads import resnet_with_heads
 from torchvision import transforms
 
 # Load your model (replace with your actual model)
-model = resnet_with_heads(num_classes=22, num_keypoints=17, backbone='resnet50')
-state_dict = torch.load('checkpoints/model_epoch_1.pth', map_location=torch.device('cpu'))
+model = resnet_with_heads(num_classes=22, num_keypoints=17, model='keypoint-rcnn')
+state_dict = torch.load('checkpoints/model_epoch_32.pth', map_location=torch.device('cuda'),  weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -50,7 +50,7 @@ def predict(frame):
 
 
 # Open webcam
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 # Size of the App
 size_x, size_y = 224, 224
@@ -82,16 +82,18 @@ while cap.isOpened():
     # Draw the keypoints (keypoints_pred should be a tensor with shape [num_keypoints, 2] for x, y)
     keypoints_pred = keypoints_pred[0]
 
+    filtered_keypoints = []
     if keypoints_pred.shape[-1] == 3:  # If the keypoints have x, y, confidence
             for i, point in enumerate(keypoints_pred):
                 x, y, confidence = point
                 # Check if the keypoint is visible and within the bounding box
-                if confidence > 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
+                if confidence > 0.7 and x_min <= x <= x_max and y_min <= y <= y_max:
                     # Draw the keypoint
                     cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
                     # Draw the index number next to the keypoint
                     cv2.putText(frame, str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # White text for index
+                    filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
                     
     elif keypoints_pred.shape[-1] == 2:  # If the keypoints have only x, y 
         for i, point in enumerate(keypoints_pred):
@@ -103,23 +105,17 @@ while cap.isOpened():
                     # Draw the index number next to the keypoint
                     cv2.putText(frame, str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # White text for index
+                    filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
 
-    # Draw the skeleton by connecting the keypoints
+    # Draw the skeleton using only valid keypoints
     for pair in SKELETON:
         i, j = pair
-            # Check if keypoints have 3 values (x, y, confidence) or just 2 (x, y)
-        if keypoints_pred.shape[-1] == 3:
-            x1, y1, _ = keypoints_pred[i]  # Unpacking 3 values
-            x2, y2, _ = keypoints_pred[j]
-        elif keypoints_pred.shape[-1] == 2:
-            x1, y1 = keypoints_pred[i]  # Unpacking 2 values
-            x2, y2 = keypoints_pred[j]
-
-        if (x1 > 0 and x2 > 0 and y1 > 0 and y2 > 0 and
-                x_min <= x1 <= x_max and y_min <= y1 <= y_max and
-                x_min <= x2 <= x_max and y_min <= y2 <= y_max):
-                cv2.line(frame, (int(x1 * size_x), int(y1 * size_y)), 
-                         (int(x2 * size_x), int(y2 * size_y)), (255, 0, 0), 2)  # Blue lines for skeleton
+        valid_points = {kp[0]: (kp[1], kp[2]) for kp in filtered_keypoints}
+        if i in valid_points and j in valid_points:
+            x1, y1 = valid_points[i]
+            x2, y2 = valid_points[j]
+            cv2.line(frame, (int(x1 * size_x), int(y1 * size_y)), 
+                     (int(x2 * size_x), int(y2 * size_y)), (255, 0, 0), 2)  # Blue lines
 
 
     # Display the result
@@ -128,9 +124,10 @@ while cap.isOpened():
     predicted_class_name = idx_to_class_name[str(predicted_class_idx)]  # Map index to class name
 
     # Display class and probability
-    cv2.putText(frame, f'Workout Label: {predicted_class_name} ({probabilities[predicted_class_idx].item():.2f})', 
-                (5, 24), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    
+    cv2.putText(frame, 'Workout Label:', (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    cv2.putText(frame, f'{predicted_class_name}', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 23)
+        
     cv2.imshow('Webcam', frame)
     
     # Press 'q' to exit

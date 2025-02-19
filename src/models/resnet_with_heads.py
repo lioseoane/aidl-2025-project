@@ -5,7 +5,6 @@ from torchvision.models import ResNet50_Weights
 from torchvision.models.detection import KeypointRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.image_list import ImageList
 
-
 class resnet_with_heads(nn.Module):
     def __init__(self, num_classes, num_keypoints, model='resnet50'):
         super(resnet_with_heads, self).__init__()

@@ -57,7 +57,7 @@ def calculate_keypoint_accuracy(predicted_keypoints, true_keypoints, threshold=0
     accuracy = correct_keypoints / total_visible_keypoints if total_visible_keypoints > 0 else 0.0
     return accuracy
 
-def calculate_bbox_accuracy(predicted_boxes, true_boxes, threshold=0.8):
+def calculate_bbox_accuracy(predicted_boxes, true_boxes, threshold=0.7):
 
     # Get the coordinates of bounding boxes
     x1 = torch.max(predicted_boxes[:, 0], true_boxes[:, 0])

@@ -39,7 +39,7 @@ def create_dataloaders(image_paths, bounding_boxes, keypoints, class_names, batc
                                  transform=transforms_resnet50, class_name_to_idx=train_dataset.class_name_to_idx)
 
     # Create the DataLoader instances for both datasets
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
     
     return train_loader, val_loader, train_dataset.class_name_to_idx
