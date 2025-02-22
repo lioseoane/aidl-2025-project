@@ -40,6 +40,7 @@ train_model(train_loader, model, class_name_to_idx, num_epochs=75, val_loader=va
 #train_model(train_loader, model, class_name_to_idx, num_epochs=50, val_loader=None)
 
 # Save the trained model
+
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 model_save_path = f'./{backbone_type}_{timestamp}.pth'  # Specify the path to save the model
 torch.save(model.state_dict(), model_save_path)
