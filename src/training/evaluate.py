@@ -3,9 +3,10 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from src.utils.visualization import visualize_keypoints
 from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast
+import os
 
-def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs", num_epoch=0):
+def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs", num_epoch=0, timestamp=''):
 
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Check if CUDA is available
@@ -15,7 +16,9 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
     idx_to_class_name = {idx: class_name for class_name, idx in class_name_to_idx.items()}  # Reverse the mapping
 
     # Initialize TensorBoard writer
-    writer = SummaryWriter(log_dir=f'{log_dir}/{model.model_label}')
+    log_dir_str = f'{log_dir}/{model.backbone_label}_{timestamp}'
+    os.makedirs(log_dir_str, exist_ok=True)
+    writer = SummaryWriter(log_dir=log_dir_str)
 
     # Set model to evaluation mode
     model.eval()
@@ -49,25 +52,16 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             new_targets = []
             for i in range(len(targets["boxes"])):  # Iterating over the batch size (64)
 
-                if model.model_label == 'resnet50':
-                    new_targets.append({
-                        "boxes": targets["boxes"][i].to(device),  # Bounding box for image i
-                        "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
-                        "keypoints": targets["keypoints"][i].to(device),  # Keypoints for image i
-                    })
-
-                elif model.model_label == 'keypoint-rcnn':
-                    new_targets.append({
-                        "boxes": targets["boxes"][i].unsqueeze(0).to(device), # Shape: [1, 4]
-                        "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
-                        "keypoints": targets["keypoints"][i].unsqueeze(0).to(device),  # Shape: [1, 17, 3]
-                        "labels": targets["labels"][i].to(device),  # 0 background, 1 person
-                    })
+                new_targets.append({
+                    "boxes": targets["boxes"][i].to(device),  # Bounding box for image i
+                    "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
+                    "keypoints": targets["keypoints"][i].to(device),  # Keypoints for image i
+                })
 
             # Forward pass and Losses
-            with autocast():  # Automatically uses FP16 where it can
+            with autocast("cuda"):  # Automatically uses FP16 where it can
                 output = model(images) 
-                keypoints_loss, boxes_loss, classification_loss = model.compute_losses(output, new_targets, val=True) # Losses
+                keypoints_loss, boxes_loss, classification_loss = model.compute_losses(output, new_targets) # Losses
 
             loss_dict = {
                 "classification_loss": classification_loss,
@@ -87,11 +81,7 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             val_loss += total_loss.item()
 
             # Calculate overall accuracy for the epoch
-            if model.model_label == 'resnet50':
-                bbox, keypoints, workout_label = output
-            elif model.model_label == 'keypoint-rcnn':
-                model.eval()
-                bbox, keypoints, workout_label = model(images)
+            bbox, keypoints, workout_label = output
 
             # Calculate and accumulate accuracy metrics
             workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
@@ -105,19 +95,13 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             total_classification_FN += batch_FN
 
             # Calculate bbox accuracy
-            if model.model_label == 'resnet50':
-                bbox_targets = torch.stack([target['boxes'] for target in new_targets])
-            elif model.model_label == 'keypoint-rcnn':
-                bbox_targets = torch.stack([target['boxes'] for target in new_targets]).squeeze(1)
+            bbox_targets = torch.stack([target['boxes'] for target in new_targets])
             bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
             total_bbox_correct += bbox_accuracy * len(bbox_targets)
             total_bbox_count += len(bbox_targets)
 
             # Calculate keypoint accuracy
-            if model.model_label == 'resnet50':
-                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
-            elif model.model_label == 'keypoint-rcnn':
-                keypoints_targets = torch.stack([target['keypoints'] for target in new_targets]).squeeze(1)
+            keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
             keypoints_accuracy = calculate_keypoint_accuracy(keypoints, keypoints_targets)
             total_keypoints_correct += keypoints_accuracy * len(keypoints_targets)
             total_keypoints_count += len(keypoints_targets) 
