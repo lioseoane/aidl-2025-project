@@ -5,7 +5,16 @@ import numpy as np
 from PIL import Image
 
 class WorkoutDataset(Dataset):
-    def __init__(self, image_paths, bounding_boxes, keypoints, class_names, resize_to, transform=None, class_name_to_idx=None):
+    def __init__(self, 
+                 image_paths, 
+                 bounding_boxes, 
+                 keypoints, 
+                 class_names, 
+                 resize_to=[256, 256], 
+                 transform=None, 
+                 class_name_to_idx=None, 
+                 heatmap_size=[64, 64]):
+        
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
         self.keypoints = keypoints
@@ -36,7 +45,7 @@ class WorkoutDataset(Dataset):
         
         # Load the image
         image = Image.open(image_filename).convert("RGB")
-        image = image.resize(self.resize_to)
+        #image = image.resize(self.resize_to)
         image = np.array(image)
 
         # Get original dimensions
@@ -49,6 +58,14 @@ class WorkoutDataset(Dataset):
         bbox = np.array(bbox)
         keypoints = np.array(keypoints)
 
+        # Separate x, y and confidence
+        if keypoints.shape[1] == 3:  
+            keypoints_xy = keypoints[:, :2]  # Extract only x, y
+            keypoints_conf = keypoints[:, 2:]  # Keep confidence separate
+        else:
+            keypoints_xy = keypoints  # No confidence dimension
+            keypoints_conf = None
+
         if scale_w == 1.0 and scale_h == 1.0:
             pass
         else:
@@ -59,7 +76,7 @@ class WorkoutDataset(Dataset):
             if  scale_w != scale_h:
                 # Rescale to the resized image size
                 bbox = bbox * [new_w, new_h, new_w, new_h]
-                keypoints *= [new_w, new_h]
+                keypoints_xy *= [new_w, new_h]
 
                 # Calculate padding
                 pad_top = (target_h  - new_h) // 2
@@ -75,11 +92,23 @@ class WorkoutDataset(Dataset):
                 
                 # Add padding
                 bbox += [pad_left, pad_top, pad_left, pad_top]
-                keypoints += [pad_left, pad_top]
+                keypoints_xy += [pad_left, pad_top]
 
                 # Normalized to 0,1
                 bbox = bbox / [target_w, target_h, target_w, target_h]
-                keypoints /= [target_w, target_h]
+                keypoints_xy /= [target_w, target_h]
+
+        
+        bbox_denorm = bbox * [target_w, target_h, target_w, target_h]
+        keypoints_denorm_xy = keypoints_xy * [target_w, target_h]
+
+                # Merge back confidence
+        if keypoints_conf is not None:
+            keypoints = np.hstack([keypoints_xy, keypoints_conf])
+            keypoints_denorm = np.hstack([keypoints_denorm_xy, keypoints_conf])
+        else:
+            keypoints = keypoints_xy
+            keypoints_denorm = keypoints_denorm_xy
 
         # Stack the visibility flag with the keypoints
         #keypoints = np.column_stack([keypoints, visibility])  # Add visibility as the third dimension
@@ -88,6 +117,8 @@ class WorkoutDataset(Dataset):
         image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
         bbox_tensor = torch.tensor(bbox, dtype=torch.float32)
         keypoints_tensor = torch.tensor(keypoints, dtype=torch.float32)
+        bbox_denorm_tensor = torch.tensor(bbox_denorm, dtype=torch.float32)
+        keypoints_denorm_tensor = torch.tensor(keypoints_denorm, dtype=torch.float32)
 
         class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)
         if class_label >= 0:  # Only assign if the class label is valid
@@ -97,9 +128,11 @@ class WorkoutDataset(Dataset):
         # Create the target dictionary
         target = {}
         target['boxes'] = bbox_tensor
+        target['boxes_denorm'] = bbox_denorm_tensor
         target['labels'] = torch.tensor([1], dtype=torch.int64)
         target['workout_labels'] = class_label_one_hot  
         target['keypoints'] = keypoints_tensor
+        target['keypoints_denorm'] = keypoints_denorm_tensor
         target['filenames'] = image_filename
         target['workout_label_names'] = class_name
 

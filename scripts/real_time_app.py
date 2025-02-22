@@ -50,7 +50,7 @@ def predict(frame):
 
 
 # Open webcam
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture(0)
 
 # Size of the App
 size_x, size_y = 224, 224
