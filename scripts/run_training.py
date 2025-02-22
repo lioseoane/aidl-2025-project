@@ -32,7 +32,7 @@ train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, b
 # Initialize model, optimizer, and loss function
 num_classes = len(set(classes_array)) 
 num_keypoints = 17
-backbone_type = 'hrnet_w32'
+backbone_type = 'resnet50'
 model = baseline(num_classes=num_classes, num_keypoints=num_keypoints, backbone=backbone_type)
 
 # Train the model
