@@ -3,6 +3,8 @@ import torch.nn as nn
 import torchvision
 from torchvision.models import ResNet50_Weights
 import timm  # For HRNet
+from torchvision.ops import roi_align
+
 
 class baseline(nn.Module):
     def __init__(self, num_classes, num_keypoints, backbone='resnet50'):
@@ -13,19 +15,18 @@ class baseline(nn.Module):
         self.backbone_label = backbone
 
         if backbone == 'resnet50':
-
             self.backbone = torchvision.models.resnet50(weights=ResNet50_Weights.DEFAULT)
             self.input_size = 2048
 
-            for param in self.backbone.parameters():
-                param.requires_grad = False
-            for param in self.backbone.layer4.parameters():
-                param.requires_grad = True
-
         if backbone == 'hrnet_w32':
             self.backbone = timm.create_model('hrnet_w32', pretrained=True, features_only=True)
-            self.input_size = 1024  
+            self.input_size = 1024 
 
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+
+        for param in self.backbone.layer4.parameters():
+            param.requires_grad = True
 
         self.bbox_head = nn.Sequential(
             nn.AdaptiveAvgPool2d(1), 
@@ -37,6 +38,27 @@ class baseline(nn.Module):
         )
 
         self.keypoints_head = nn.Sequential(
+            #nn.ConvTranspose2d(self.input_size, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            #nn.BatchNorm2d(256),
+            #nn.ReLU(inplace=True),
+
+            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            #nn.BatchNorm2d(256),
+            #nn.ReLU(inplace=True),
+
+            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            #nn.BatchNorm2d(256),
+            #nn.ReLU(inplace=True),
+
+            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            #nn.BatchNorm2d(256),
+            #nn.ReLU(inplace=True),
+
+            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            #nn.BatchNorm2d(256),
+            #nn.ReLU(inplace=True),
+
+            #nn.Conv2d(256, num_keypoints, kernel_size=1),
             nn.AdaptiveAvgPool2d(1), 
             nn.Flatten(),  
             nn.Linear(self.input_size, self.input_size),
@@ -60,41 +82,41 @@ class baseline(nn.Module):
             x = self.backbone.bn1(x)
             x = self.backbone.relu(x)
             x = self.backbone.maxpool(x)
-            feat1 = self.backbone.layer1(x)  # Feature Map after Layer 1
-            feat2 = self.backbone.layer2(feat1)  # Feature Map after Layer 2
-            feat3 = self.backbone.layer3(feat2)  # Feature Map after Layer 3
-            feat = self.backbone.layer4(feat3)  # Feature Map after Layer 4 (Final)
+            feat1 = self.backbone.layer1(x)  # low-level features
+            feat2 = self.backbone.layer2(feat1)  # layer2 features
+            feat3 = self.backbone.layer3(feat2)  # layer3 features
+            feat4 = self.backbone.layer4(feat3)  # layer4 features
 
-        elif  self.backbone_label == 'hrnet_w32':
+        elif self.backbone_label == 'hrnet_w32':
             features = self.backbone(x)  # HRNet outputs multiple scales; we use the last one
             feat = features[-1]  # Highest resolution feature
-
+        
         # bbox head, [batch_size, 4]
-        bbox = self.bbox_head(feat)
-
-        # keypoints heatmaps, [batch_size, num_keypoints, 3]
-        keypoints = self.keypoints_head(feat)
-        keypoints = self.keypoints_head(feat).view(-1, self.num_keypoints, 3)
-        keypoints = torch.sigmoid(keypoints)  
+        bbox = self.bbox_head(feat4)
 
         # workout label head, [batch_size, num_classes]
-        workout_label = self.workout_label_head(feat)
+        workout_label = self.workout_label_head(feat4)
+    
+        # keypoints heatmaps, [batch_size, num_keypoints, 3]
+        #keypoints = self.keypoints_head(feat4)
+        keypoints = self.keypoints_head(feat4).view(-1, self.num_keypoints, 3)
+        keypoints = torch.sigmoid(keypoints)  
 
         return bbox, keypoints, workout_label
-    
+        
     def compute_losses(self, outputs, targets):
         # Extract targets
         bbox_targets = torch.stack([target['boxes'] for target in targets]) 
         keypoints_targets = torch.stack([target['keypoints'] for target in targets]) 
         workout_label_targets = torch.stack([target['workout_labels'] for target in targets]) 
-            
+                
         # Check if the tensor is batch_size, 1, bbox/keypoints or batch_sizem bbox/keypoints
         if bbox_targets.shape[1] == 1:
             bbox_targets = bbox_targets.squeeze(1)
 
         if keypoints_targets.shape[1] == 1:
             keypoints_targets = keypoints_targets.squeeze(1)
-            
+                
         # Confidence scores boolean
         use_confience_scores = keypoints_targets.shape[-1] == 3
 
@@ -111,8 +133,9 @@ class baseline(nn.Module):
         bbox_loss = nn.MSELoss()(outputs[0], bbox_targets)
 
         # Compute the keypoint loss
+        #keypoints_loss = nn.MSELoss()(outputs[1], keypoints_targets)
         keypoints_loss = nn.MSELoss(reduction='none')(outputs[1][:, :, :2], keypoints_targets[:, :, :2])
-            
+                
         # Apply visibility mask if available (ignores keypoints where visibility = 0)
         keypoints_loss = keypoints_loss * visibility_mask.unsqueeze(-1)  # Keep shape (B, num_keypoints, 2)
         keypoints_loss = keypoints_loss.sum() / (visibility_mask.sum() + 1e-6) # Avoid division by 0

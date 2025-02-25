@@ -7,12 +7,17 @@ import torch
 import cv2
 from PIL import Image
 import numpy as np
-from src.models.resnet_with_heads import resnet_with_heads
+from src.models.baseline_heatmap import baseline_heatmap
 from torchvision import transforms
+from src.utils.heatmaps import extract_keypoints_with_confidence
 
 # Load your model (replace with your actual model)
-model = resnet_with_heads(num_classes=22, num_keypoints=17, model='keypoint-rcnn')
-state_dict = torch.load('checkpoints/model_epoch_32.pth', map_location=torch.device('cuda'),  weights_only=True)
+
+model = baseline_heatmap(num_classes=20, num_keypoints=17, backbone='resnet50')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(device)
+
+state_dict = torch.load('checkpoints/model_epoch_52.pth', map_location=device)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -28,22 +33,32 @@ SKELETON = [
 ]
 
 def predict(frame):
-    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Define transformation to convert PIL image to Tensor
-    transform = transforms.Compose([
-        transforms.ToTensor(),  # Convert to Tensor (automatically normalizes to [0,1])
-        #transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    # Convert to float32 and scale the pixel values to [0,1]
+    img_rgb = img_rgb.astype(np.float32) / 255.0
 
-    # Apply transform and add batch dimension
-    img = transform(img).unsqueeze(0)
+    # Define the normalization parameters
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+
+    # Manually normalize the image
+    img_norm = (img_rgb - mean) / std
+
+    # Convert from HWC to CHW format and create a tensor
+    img_tensor = torch.from_numpy(img_norm).permute(2, 0, 1)  # shape: [C, H, W]
+
+    # Add batch dimension and move to device
+    img_tensor = img_tensor.unsqueeze(0).to(device)
+    img_tensor = img_tensor.float()
+
     with torch.no_grad():
-        output = model(img)
+        output = model(img_tensor)
 
     # Extract the predicted values from output (assuming output is a tuple)
     bbox_pred = output[0]  # This should be the predicted bounding boxes
-    keypoints_pred = output[1]  # This should be the predicted keypoints
+    keypoints_pred = extract_keypoints_with_confidence(output[1])  # This should be the predicted keypoints
+    print(keypoints_pred)
     workout_label_pred = output[2]  # This should be the predicted workout label
 
     return bbox_pred, keypoints_pred, workout_label_pred
@@ -87,7 +102,7 @@ while cap.isOpened():
             for i, point in enumerate(keypoints_pred):
                 x, y, confidence = point
                 # Check if the keypoint is visible and within the bounding box
-                if confidence > 0.7 and x_min <= x <= x_max and y_min <= y <= y_max:
+                if confidence > 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
                     # Draw the keypoint
                     cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
                     # Draw the index number next to the keypoint

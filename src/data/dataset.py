@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 import cv2
 import torch
 import numpy as np
-from PIL import Image
+from src.utils.heatmaps import generate_heatmaps, extract_keypoints_with_confidence
 
 class WorkoutDataset(Dataset):
     def __init__(self, 
@@ -10,16 +10,19 @@ class WorkoutDataset(Dataset):
                  bounding_boxes, 
                  keypoints, 
                  class_names, 
-                 resize_to=[256, 256], 
+                 resize_to=[224, 224], 
                  transform=None, 
                  class_name_to_idx=None, 
-                 heatmap_size=[64, 64]):
+                 heatmap_size=[224, 224],
+                 sigma = 1):
         
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
         self.keypoints = keypoints
         self.class_names = class_names
         self.resize_to = resize_to
+        self.heatmap_size = heatmap_size
+        self.sigma = sigma
 
         # Create a class-to-index mapping
         if class_name_to_idx:
@@ -44,9 +47,8 @@ class WorkoutDataset(Dataset):
         class_label = self.class_name_to_idx[class_name]
         
         # Load the image
-        image = Image.open(image_filename).convert("RGB")
-        #image = image.resize(self.resize_to)
-        image = np.array(image)
+        image = cv2.imread(image_filename)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # Get original dimensions
         h, w, _ = image.shape
@@ -115,10 +117,13 @@ class WorkoutDataset(Dataset):
 
         # Convert to tensors
         image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
-        bbox_tensor = torch.tensor(bbox, dtype=torch.float32)
-        keypoints_tensor = torch.tensor(keypoints, dtype=torch.float32)
-        bbox_denorm_tensor = torch.tensor(bbox_denorm, dtype=torch.float32)
-        keypoints_denorm_tensor = torch.tensor(keypoints_denorm, dtype=torch.float32)
+
+        bbox_tensor = torch.tensor(bbox, dtype=torch.float32) # Normalized based bbox [0, 1]
+        #rois_tensor = torch.tensor(bbox_denorm, dtype=torch.float32) # Denormalized based bbox [x, y]
+
+        keypoints_tensor = torch.tensor(keypoints, dtype=torch.float32) # Normalized based keypoints [0, 1]
+        #keypoints_tensor = torch.tensor(keypoints_denorm, dtype=torch.float32) # Denormalized based keypoints [x, y]
+        heatmaps_tensor = generate_heatmaps(keypoints, output_size=tuple(self.heatmap_size), sigma=self.sigma)
 
         class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)
         if class_label >= 0:  # Only assign if the class label is valid
@@ -128,11 +133,10 @@ class WorkoutDataset(Dataset):
         # Create the target dictionary
         target = {}
         target['boxes'] = bbox_tensor
-        target['boxes_denorm'] = bbox_denorm_tensor
         target['labels'] = torch.tensor([1], dtype=torch.int64)
         target['workout_labels'] = class_label_one_hot  
         target['keypoints'] = keypoints_tensor
-        target['keypoints_denorm'] = keypoints_denorm_tensor
+        target['heatmaps'] = heatmaps_tensor
         target['filenames'] = image_filename
         target['workout_label_names'] = class_name
 
