@@ -5,10 +5,13 @@ import torch.optim as optim
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter  
 from src.utils.visualization import visualize_keypoints
-from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy
+from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy, calculate_keypoint_average_precision
 from src.training.evaluate import evaluate_model
 from torch.amp import autocast, GradScaler
 from datetime import datetime
+from src.utils.heatmaps import extract_keypoints_with_confidence
+import matplotlib.cm as cm
+import numpy as np
 
 
 def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="logs/train_logs", 
@@ -17,7 +20,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
     # Clear cache
     torch.cuda.empty_cache()
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)  # Initialize optimizer
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)  # Initialize optimizer
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
 
@@ -69,9 +72,9 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                 new_targets.append({
                     "boxes": targets["boxes"][i].to(device),  # Bounding box for image i
                     "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
-                    "keypoints": targets["keypoints"][i].to(device),  # Keypoints for image i
+                    "keypoints": targets["heatmaps"][i].to(device),  # Keypoints for image i
                 })
-                
+
             optimizer.zero_grad()  # Zero the gradients before backward pass
 
             # Forward pass and Losses
@@ -101,7 +104,6 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
             running_bbox_loss += bbox_loss.item()
             running_loss += total_loss.item()  # Accumulate loss for averaging
 
-
             model.eval()
             with torch.no_grad():
                 # Calculate overall accuracy for the epoch
@@ -110,8 +112,8 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                 # Calculate and accumulate accuracy metrics
                 workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
                 class_accuracy, batch_TP, batch_FP, batch_FN = calculate_classification_accuracy(workout_label, 
-                                                                                                workout_label_targets, 
-                                                                                                len(idx_to_class_name))
+                                                                                                 workout_label_targets, 
+                                                                                                 len(idx_to_class_name))
                 total_classification_correct += class_accuracy * len(workout_label_targets)
                 total_classification_count += len(workout_label_targets)
                 total_classification_TP += batch_TP
@@ -120,15 +122,15 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
                 # Calculate bbox accuracy
                 bbox_targets = torch.stack([target['boxes'] for target in new_targets])
-                
                 bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
                 total_bbox_correct += bbox_accuracy * len(bbox_targets)
                 total_bbox_count += len(bbox_targets)
 
                 # Calculate keypoint accuracy
                 keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
-
-                keypoints_accuracy = calculate_keypoint_accuracy(keypoints, keypoints_targets)
+                keypoints_from_heatmaps = extract_keypoints_with_confidence(keypoints)
+                keypoints_targets_from_heatmaps = extract_keypoints_with_confidence(keypoints_targets)
+                keypoints_accuracy = calculate_keypoint_average_precision(keypoints_from_heatmaps, keypoints_targets_from_heatmaps)
                 total_keypoints_correct += keypoints_accuracy * len(keypoints_targets)
                 total_keypoints_count += len(keypoints_targets) 
 
@@ -150,8 +152,8 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                         # Visualize keypoints and bounding boxes
                         vis_image = visualize_keypoints(
                             sample_image, 
-                            keypoints[i].cpu().detach().numpy(), 
-                            keypoints_targets[i].cpu().numpy(), 
+                            keypoints_from_heatmaps[i].cpu().detach().numpy(), 
+                            keypoints_targets_from_heatmaps[i].cpu().numpy(), 
                             sample_image.shape[2], 
                             sample_image.shape[1], 
                             bbox[i].cpu().detach().numpy(), 
@@ -174,6 +176,22 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                         log_entry = f"Predicted: {predicted_class_name} (Prob: {predicted_prob:.4f})\nTrue: {true_class_name}"
                         writer.add_text(f"Classification/Image_{i}", log_entry, epoch)
 
+                        # Convert heatmap to numpy and sum across channels
+                        heatmap_pred = np.sum(keypoints[i].cpu().detach().numpy(), axis=0)
+                        heatmap_target = np.sum(keypoints_targets[i].cpu().detach().numpy(), axis=0)
+
+                        # Apply jet colormap (converts to RGB)
+                        heatmap_pred_colored = cm.jet(heatmap_pred)[:, :, :3]  # Drop alpha channel
+                        heatmap_target_colored = cm.jet(heatmap_target)[:, :, :3]
+
+                        # Convert to tensor (C, H, W) format
+                        heatmap_pred_tensor = torch.tensor(heatmap_pred_colored).permute(2, 0, 1)
+                        heatmap_target_tensor = torch.tensor(heatmap_target_colored).permute(2, 0, 1)
+
+                        # Log heatmaps in TensorBoard
+                        writer.add_image(f"Heatmaps_Pred/{i}", heatmap_pred_tensor, epoch, dataformats="CHW")
+                        writer.add_image(f"Heatmaps_Target/{i}", heatmap_target_tensor, epoch, dataformats="CHW")
+
             model.train()
 
         # Compute epoch loss and log it
@@ -192,7 +210,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
         epoch_keypoints_accuracy = total_keypoints_correct / total_keypoints_count
 
         writer.add_scalar("Epoch_Accuracy/Classification_Accuracy", epoch_classification_accuracy, epoch)
-        writer.add_scalar("Epoch_Accuracy/Keypoint_PCK", epoch_keypoints_accuracy, epoch)
+        writer.add_scalar("Epoch_Accuracy/Keypoint_AP", epoch_keypoints_accuracy, epoch)
         writer.add_scalar("Epoch_Accuracy/BBox_IoU", epoch_bbox_accuracy, epoch)
 
 
@@ -201,8 +219,8 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
         epoch_classification_recall = total_classification_TP / (total_classification_TP + total_classification_FN
                                                                  ) if (total_classification_TP + total_classification_FN) > 0 else 0.0
 
-        writer.add_scalar("Epoch_Accuracy/Classification_Precision", epoch_classification_precision, epoch)
-        writer.add_scalar("Epoch_Accuracy/Classification_Recall", epoch_classification_recall, epoch)
+        #writer.add_scalar("Epoch_Accuracy/Classification_Precision", epoch_classification_precision, epoch)
+        #writer.add_scalar("Epoch_Accuracy/Classification_Recall", epoch_classification_recall, epoch)
 
         # Evaluate the model
         if val_loader != None:

@@ -57,6 +57,49 @@ def calculate_keypoint_accuracy(predicted_keypoints, true_keypoints, threshold=0
     accuracy = correct_keypoints / total_visible_keypoints if total_visible_keypoints > 0 else 0.0
     return accuracy
 
+def calculate_keypoint_average_precision(predicted_keypoints, true_keypoints, threshold=0.01):
+    batch_size, num_keypoints, _ = predicted_keypoints.shape
+
+    # Extract predicted coordinates and confidence
+    pred_xy = predicted_keypoints[:, :, :2]  # (B, num_keypoints, 2)
+    pred_conf = predicted_keypoints[:, :, 2]  # (B, num_keypoints)
+
+    # Extract ground truth coordinates and visibility mask
+    true_xy = true_keypoints[:, :, :2]
+    visible_mask = true_keypoints[:, :, 2] >= 0.5  # Only consider visible keypoints
+
+    # Compute Euclidean distances
+    distances = torch.norm(pred_xy - true_xy, dim=2)  # Shape: (B, num_keypoints)
+
+    # Determine correct matches (distance < threshold)
+    matches = (distances < threshold) & visible_mask
+
+    # Convert boolean matches to floats (1 for correct, 0 for incorrect)
+    matches_float = matches.float()
+
+    # Sort predictions by confidence score in descending order
+    sorted_indices = torch.argsort(pred_conf.view(-1), descending=True)
+    matches_sorted = matches_float.view(-1)[sorted_indices]
+
+    # Compute cumulative true positives (TP) and false positives (FP)
+    tp = torch.cumsum(matches_sorted, dim=0)
+    fp = torch.cumsum(1 - matches_sorted, dim=0)
+
+    # Compute precision and recall at each prediction
+    precision = tp / (tp + fp + 1e-6)
+    total_positives = visible_mask.sum().float()
+    recall = tp / (total_positives + 1e-6)
+
+    # Append boundary values for AP calculation
+    device = predicted_keypoints.device
+    precision = torch.cat([torch.tensor([precision[0].item()], device=device), precision, torch.tensor([0.0], device=device)])
+    recall = torch.cat([torch.tensor([0.0], device=device), recall, torch.tensor([1.0], device=device)])
+
+    # Compute AP using the trapezoidal rule over the precision-recall curve
+    ap = torch.trapz(precision, recall)
+    
+    return ap.item()
+
 def calculate_bbox_accuracy(predicted_boxes, true_boxes, threshold=0.7):
     # Get the intersection coordinates
     x1 = torch.max(predicted_boxes[:, 0], true_boxes[:, 0])  # Left x-coordinate
