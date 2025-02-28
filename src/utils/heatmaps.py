@@ -37,11 +37,16 @@ import torch
 def extract_keypoints_with_confidence(heatmaps):
     B, num_keypoints, H, W = heatmaps.shape
 
+    # Normalize heatmaps before extracting peaks
+    heatmaps = heatmaps - heatmaps.min()  # Shift values to avoid negative scores
+    heatmaps = heatmaps / (heatmaps.max() + 1e-6)  # Normalize to [0, 1]
+
     # Reshape heatmaps to find the max index
     heatmaps_flat = heatmaps.view(B, num_keypoints, -1)
+    heatmaps_softmax = F.softmax(heatmaps_flat, dim=2)  # Apply softmax along spatial dimension
 
     # Get max confidence and corresponding indices
-    confidences, indices = torch.max(heatmaps_flat, dim=2)
+    confidences, indices = torch.max(heatmaps_softmax, dim=2)
 
     # Convert flat indices to (x, y) coordinates
     x_coords = (indices % W).float()  # x coordinate

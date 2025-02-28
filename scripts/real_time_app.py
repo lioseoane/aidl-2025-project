@@ -17,7 +17,7 @@ model = baseline_heatmap(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 
-state_dict = torch.load('checkpoints/model_epoch_52.pth', map_location=device)
+state_dict = torch.load('checkpoints/model_epoch_100.pth', map_location=device)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -39,14 +39,14 @@ def predict(frame):
     img_rgb = img_rgb.astype(np.float32) / 255.0
 
     # Define the normalization parameters
-    mean = np.array([0.485, 0.456, 0.406])
-    std = np.array([0.229, 0.224, 0.225])
+    #mean = np.array([0.485, 0.456, 0.406])
+    #std = np.array([0.229, 0.224, 0.225])
 
     # Manually normalize the image
-    img_norm = (img_rgb - mean) / std
+    #img_norm = (img_rgb - mean) / std
 
     # Convert from HWC to CHW format and create a tensor
-    img_tensor = torch.from_numpy(img_norm).permute(2, 0, 1)  # shape: [C, H, W]
+    img_tensor = torch.from_numpy(img_rgb).permute(2, 0, 1)  # shape: [C, H, W]
 
     # Add batch dimension and move to device
     img_tensor = img_tensor.unsqueeze(0).to(device)
@@ -68,7 +68,7 @@ def predict(frame):
 cap = cv2.VideoCapture(0)
 
 # Size of the App
-size_x, size_y = 224, 224
+size_x, size_y = 480, 360
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, size_x)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, size_y)
@@ -102,7 +102,7 @@ while cap.isOpened():
             for i, point in enumerate(keypoints_pred):
                 x, y, confidence = point
                 # Check if the keypoint is visible and within the bounding box
-                if confidence > 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
+                if confidence > 0.01 and x_min <= x <= x_max and y_min <= y <= y_max:
                     # Draw the keypoint
                     cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
                     # Draw the index number next to the keypoint
