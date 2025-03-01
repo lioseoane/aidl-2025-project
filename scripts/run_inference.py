@@ -75,9 +75,9 @@ keypoints_pred = keypoints_pred[0]
 filtered_keypoints = []
 
 for i, point in enumerate(keypoints_pred):
-     x, y, confidence = point
+    x, y, confidence = point
 
-     if confidence >= 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
+    if confidence >= 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
         cv2.circle(image[0], (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
 
         cv2.putText(image[0], str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
