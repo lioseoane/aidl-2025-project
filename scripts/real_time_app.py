@@ -5,12 +5,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import json
 import torch
 import cv2
-from PIL import Image
 import numpy as np
-from src.models.heatmap_fpn import heatmap_lateral
-from torchvision import transforms
+from src.models.heatmap_fpn import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence
 
+# Kalmar fiter --> Get smoothed keypoints
 class KalmanFilterKeypoint:
     def __init__(self, process_noise=1e-2, measurement_noise=1e-1):
         self.kf = cv2.KalmanFilter(4, 2)  # State: [x, y, dx, dy] | Measurement: [x, y]
@@ -43,11 +42,11 @@ class KalmanFilterKeypoint:
         return predicted_state[0][0], predicted_state[1][0]  # Predicted (x, y)
 
 
-model = heatmap_lateral(num_classes=20, num_keypoints=17, backbone='resnet50')
+# Initialize model and load checkpoint
+model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-
-state_dict = torch.load('checkpoints/model_epoch_54.pth', map_location=device)
+state_dict = torch.load('checkpoints/model_epoch_54.pth', map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -66,13 +65,14 @@ SKELETON = [
 num_keypoints = 17
 kalman_filters = [KalmanFilterKeypoint() for _ in range(num_keypoints)]
 
+confidence_threshold = 0.3
 
-def predict(frame, size_x=224, size_y=224):
+# predict the model
+def predict(frame):
     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Convert from HWC to CHW format and create a tensor
     h, w, _ = image.shape
-    target_w, target_h = [size_x, size_y]
+    target_w, target_h = [224, 224]
 
     scale = min(target_w / float(w), target_h / float(h))
     new_w, new_h = int(w * scale), int(h * scale)
@@ -107,8 +107,6 @@ cap = cv2.VideoCapture(0)
 # Size of the App
 size_x, size_y = 448, 448
 
-# Size of the model
-model_x, model_y = 224, 224
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, size_x)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, size_y)
@@ -127,32 +125,30 @@ while cap.isOpened():
     frame = cv2.resize(frame, (size_x, size_y))
     
     # Make prediction
-    bbox_pred, keypoints_pred, workout_label_pred = predict(frame, model_x, model_y)
+    bbox_pred, keypoints_pred, workout_label_pred = predict(frame)
     
-    # Draw the bounding boxes (bbox_pred should be in (x_min, y_min, x_max, y_max) format)
+    # Draw the bounding boxes
     for bbox in bbox_pred:
         x_min, y_min, x_max, y_max = bbox
-        cv2.rectangle(frame, (int(x_min * size_x), int(y_min * size_y)), (int(x_max * size_x), int(y_max * size_y)), (0, 255, 0), 2)
+        cv2.rectangle(frame, (int(x_min * size_x), int(y_min * size_y)), (int(x_max * size_x), int(y_max * size_y)), (0, 255, 0), 1)
 
-    # Draw the keypoints (keypoints_pred should be a tensor with shape [num_keypoints, 2] for x, y)
+    # Draw the keypoints
     keypoints_pred = keypoints_pred[0]
-    filtered_keypoints = []
 
+    filtered_keypoints = []
     for i, point in enumerate(keypoints_pred):
         x, y, confidence = point
 
-        if confidence >= 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
+        if confidence >= confidence_threshold:
             x, y = x.item(), y.item()
             kalman_filters[i].update(x, y)  # Update Kalman filter
             x, y = kalman_filters[i].predict()  # Get smoothed keypoints
-            cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
-
+            cv2.circle(frame, (int(x * size_x), int(y * size_y)), 1, (0, 0, 255), -1)  # Red dots for keypoints
             cv2.putText(frame, str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA) 
-            
             filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
 
-    # Draw the skeleton using only valid keypoints
+    # Draw the skeleton 
     for pair in SKELETON:
         i, j = pair
         valid_points = {kp[0]: (kp[1], kp[2]) for kp in filtered_keypoints}
@@ -160,7 +156,7 @@ while cap.isOpened():
             x1, y1 = valid_points[i]
             x2, y2 = valid_points[j]
             cv2.line(frame, (int(x1 * size_x), int(y1 * size_y)), 
-                     (int(x2 * size_x), int(y2 * size_y)), (255, 0, 0), 2)  # Blue lines
+                     (int(x2 * size_x), int(y2 * size_y)), (0, 0, 255), 1)  # Blue lines
 
 
     # Display the result
@@ -171,9 +167,9 @@ while cap.isOpened():
     # Display class and probability
     cv2.putText(frame, 'Workout Label:', (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     cv2.putText(frame, f'{predicted_class_name}', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 23)
+    cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         
-    cv2.imshow('Webcam', frame)
+    cv2.imshow('Live App', frame)
     
     # Press 'q' to exit
     if cv2.waitKey(1) & 0xFF == ord('q'):
