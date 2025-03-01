@@ -57,7 +57,7 @@ def calculate_keypoint_accuracy(predicted_keypoints, true_keypoints, threshold=0
     accuracy = correct_keypoints / total_visible_keypoints if total_visible_keypoints > 0 else 0.0
     return accuracy
 
-def calculate_keypoint_average_precision(predicted_keypoints, true_keypoints, threshold=0.01):
+def calculate_keypoint_average_precision(predicted_keypoints, true_keypoints, threshold=0.001):
     batch_size, num_keypoints, _ = predicted_keypoints.shape
 
     # Extract predicted coordinates and confidence

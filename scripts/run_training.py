@@ -5,6 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.data.dataloader import create_dataloaders
 from src.data.load_workout_data import load_workout_data
 from src.models.baseline_heatmap import baseline_heatmap
+from src.models.heatmap_lateral import heatmap_lateral
 from src.training.train import train_model
 import torch
 from datetime import datetime
@@ -34,7 +35,7 @@ train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, b
 num_classes = len(set(classes_array)) 
 num_keypoints = 17
 backbone_type = 'resnet50'
-model = baseline_heatmap(num_classes=num_classes, num_keypoints=num_keypoints, backbone=backbone_type)
+model = heatmap_lateral(num_classes=num_classes, num_keypoints=num_keypoints, backbone=backbone_type)
 
 # Train the model
 train_model(train_loader, model, class_name_to_idx, num_epochs=75, val_loader=val_loader)

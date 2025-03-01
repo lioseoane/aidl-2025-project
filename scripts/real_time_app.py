@@ -7,17 +7,47 @@ import torch
 import cv2
 from PIL import Image
 import numpy as np
-from src.models.baseline_heatmap import baseline_heatmap
+from src.models.heatmap_lateral import heatmap_lateral
 from torchvision import transforms
 from src.utils.heatmaps import extract_keypoints_with_confidence
 
-# Load your model (replace with your actual model)
+class KalmanFilterKeypoint:
+    def __init__(self, process_noise=1e-2, measurement_noise=1e-1):
+        self.kf = cv2.KalmanFilter(4, 2)  # State: [x, y, dx, dy] | Measurement: [x, y]
 
-model = baseline_heatmap(num_classes=20, num_keypoints=17, backbone='resnet50')
+        self.kf.transitionMatrix = np.array([
+            [1, 0, 1, 0],  # x = x + dx
+            [0, 1, 0, 1],  # y = y + dy
+            [0, 0, 1, 0],  # dx remains dx
+            [0, 0, 0, 1]   # dy remains dy
+        ], dtype=np.float32)
+
+        self.kf.measurementMatrix = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0]
+        ], dtype=np.float32)
+
+        self.kf.processNoiseCov = np.eye(4, dtype=np.float32) * process_noise
+        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * measurement_noise
+
+        self.kf.statePost = np.zeros((4, 1), dtype=np.float32)
+
+    def update(self, x, y):
+        measurement = np.array([[x], [y]], dtype=np.float32)
+        if np.all(self.kf.statePost[:2] == 0):  # If first frame, initialize state
+            self.kf.statePost[:2] = measurement
+        self.kf.correct(measurement)
+
+    def predict(self):
+        predicted_state = self.kf.predict()
+        return predicted_state[0][0], predicted_state[1][0]  # Predicted (x, y)
+
+
+model = heatmap_lateral(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 
-state_dict = torch.load('checkpoints/model_epoch_100.pth', map_location=device)
+state_dict = torch.load('checkpoints/model_epoch_54.pth', map_location=device)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -32,34 +62,41 @@ SKELETON = [
     (12, 14), (14, 16)               # Right Hip -> Right Knee -> Right Ankle
 ]
 
-def predict(frame):
-    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+# Initialize Kalman filters for all keypoints
+num_keypoints = 17
+kalman_filters = [KalmanFilterKeypoint() for _ in range(num_keypoints)]
 
-    # Convert to float32 and scale the pixel values to [0,1]
-    img_rgb = img_rgb.astype(np.float32) / 255.0
 
-    # Define the normalization parameters
-    #mean = np.array([0.485, 0.456, 0.406])
-    #std = np.array([0.229, 0.224, 0.225])
-
-    # Manually normalize the image
-    #img_norm = (img_rgb - mean) / std
+def predict(frame, size_x=224, size_y=224):
+    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     # Convert from HWC to CHW format and create a tensor
-    img_tensor = torch.from_numpy(img_rgb).permute(2, 0, 1)  # shape: [C, H, W]
+    h, w, _ = image.shape
+    target_w, target_h = [size_x, size_y]
 
-    # Add batch dimension and move to device
-    img_tensor = img_tensor.unsqueeze(0).to(device)
-    img_tensor = img_tensor.float()
+    scale = min(target_w / float(w), target_h / float(h))
+    new_w, new_h = int(w * scale), int(h * scale)
+    image = cv2.resize(image, (new_w, new_h))
+
+    pad_top = (target_h - new_h) // 2
+    pad_bottom = target_h - new_h - pad_top
+    pad_left = (target_w - new_w) // 2
+    pad_right = target_w - new_w - pad_left
+
+    image = cv2.copyMakeBorder(
+        image, pad_top, pad_bottom, pad_left, pad_right,
+        borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0]
+    )
+
+    sample_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize
+    sample_tensor = sample_tensor.unsqueeze(0).to(device)
 
     with torch.no_grad():
-        output = model(img_tensor)
+        output = model(sample_tensor)
 
-    # Extract the predicted values from output (assuming output is a tuple)
-    bbox_pred = output[0]  # This should be the predicted bounding boxes
-    keypoints_pred = extract_keypoints_with_confidence(output[1])  # This should be the predicted keypoints
-    print(keypoints_pred)
-    workout_label_pred = output[2]  # This should be the predicted workout label
+    bbox_pred = output[0] 
+    keypoints_pred = extract_keypoints_with_confidence(output[1])  
+    workout_label_pred = output[2]  
 
     return bbox_pred, keypoints_pred, workout_label_pred
 
@@ -68,7 +105,10 @@ def predict(frame):
 cap = cv2.VideoCapture(0)
 
 # Size of the App
-size_x, size_y = 480, 360
+size_x, size_y = 448, 448
+
+# Size of the model
+model_x, model_y = 224, 224
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, size_x)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, size_y)
@@ -87,7 +127,7 @@ while cap.isOpened():
     frame = cv2.resize(frame, (size_x, size_y))
     
     # Make prediction
-    bbox_pred, keypoints_pred, workout_label_pred = predict(frame)
+    bbox_pred, keypoints_pred, workout_label_pred = predict(frame, model_x, model_y)
     
     # Draw the bounding boxes (bbox_pred should be in (x_min, y_min, x_max, y_max) format)
     for bbox in bbox_pred:
@@ -96,31 +136,21 @@ while cap.isOpened():
 
     # Draw the keypoints (keypoints_pred should be a tensor with shape [num_keypoints, 2] for x, y)
     keypoints_pred = keypoints_pred[0]
-
     filtered_keypoints = []
-    if keypoints_pred.shape[-1] == 3:  # If the keypoints have x, y, confidence
-            for i, point in enumerate(keypoints_pred):
-                x, y, confidence = point
-                # Check if the keypoint is visible and within the bounding box
-                if confidence > 0.01 and x_min <= x <= x_max and y_min <= y <= y_max:
-                    # Draw the keypoint
-                    cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
-                    # Draw the index number next to the keypoint
-                    cv2.putText(frame, str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # White text for index
-                    filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
-                    
-    elif keypoints_pred.shape[-1] == 2:  # If the keypoints have only x, y 
-        for i, point in enumerate(keypoints_pred):
-                x, y = point
-                # Check if the keypoint is within the bounding box
-                if x_min <= x <= x_max and y_min <= y <= y_max:
-                    # Draw the keypoint
-                    cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
-                    # Draw the index number next to the keypoint
-                    cv2.putText(frame, str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # White text for index
-                    filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
+
+    for i, point in enumerate(keypoints_pred):
+        x, y, confidence = point
+
+        if confidence >= 0.5 and x_min <= x <= x_max and y_min <= y <= y_max:
+            x, y = x.item(), y.item()
+            kalman_filters[i].update(x, y)  # Update Kalman filter
+            x, y = kalman_filters[i].predict()  # Get smoothed keypoints
+            cv2.circle(frame, (int(x * size_x), int(y * size_y)), 5, (0, 0, 255), -1)  # Red dots for keypoints
+
+            cv2.putText(frame, str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA) 
+            
+            filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
 
     # Draw the skeleton using only valid keypoints
     for pair in SKELETON:

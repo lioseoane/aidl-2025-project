@@ -63,7 +63,7 @@ class WorkoutDataset(Dataset):
         # Separate x, y and confidence
         if keypoints.shape[1] == 3:  
             keypoints_xy = keypoints[:, :2]  # Extract only x, y
-            keypoints_conf = keypoints[:, 2:]  # Keep confidence separate
+            keypoints_conf = keypoints[:, 2].flatten() 
         else:
             keypoints_xy = keypoints  # No confidence dimension
             keypoints_conf = None
@@ -97,10 +97,12 @@ class WorkoutDataset(Dataset):
             bbox = bbox / [target_w, target_h, target_w, target_h]
             keypoints_xy /= [target_w, target_h]
 
-        keypoints_xy, keypoints_conf = self.fix_keypoints(keypoints_xy, keypoints_conf)
-        keypoints_conf = keypoints_conf.squeeze()  # Ensure it's 1D (17,)
-        keypoints_conf = keypoints_conf.reshape(-1, 1)  # Now (17,1)
-        keypoints_fixed = np.hstack([keypoints_xy, keypoints_conf])
+        if keypoints_conf is not None:
+            keypoints_xy[keypoints_conf < 0.5] = 0
+
+        keypoints_conf[keypoints_conf < 0.5] = 0.0
+        
+        keypoints_fixed = np.hstack([keypoints_xy, keypoints_conf[:, None]])  # ✅ Correctly reshaped
 
         #bbox_denorm = bbox * [target_w, target_h, target_w, target_h]
         #keypoints_denorm_xy = keypoints_xy * [target_w, target_h]
@@ -112,6 +114,8 @@ class WorkoutDataset(Dataset):
 
         keypoints_tensor = torch.tensor(keypoints_fixed, dtype=torch.float32) # Normalized based keypoints [0, 1]
         heatmaps_tensor = generate_heatmaps(keypoints_fixed, output_size=tuple(self.heatmap_size), sigma=self.sigma)
+        confidences_tensor = torch.tensor(keypoints_conf[:, None], dtype=torch.float32) 
+
 
         class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)
         if class_label >= 0:  # Only assign if the class label is valid
@@ -120,39 +124,13 @@ class WorkoutDataset(Dataset):
         # Create the target dictionary
         target = {
             'boxes': bbox_tensor,
-            'labels': torch.tensor([1], dtype=torch.int64),
+            #'labels': torch.tensor([1], dtype=torch.int64),
             'workout_labels': class_label_one_hot,
-            'keypoints': keypoints_tensor,
+            #'keypoints': keypoints_tensor,
+            'confidences': confidences_tensor,
             'heatmaps': heatmaps_tensor,
             'filenames': image_filename,
             'workout_label_names': class_name
         }
 
         return image_tensor, target
-    
-
-    def fix_keypoints(self, keypoints_xy, keypoints_conf):
-        """
-        Fix keypoint inconsistencies:
-        - If confidence < 0.5, replace with interpolated value or previous frame’s keypoint.
-        - Ensure all 17 keypoints are present.
-        """
-        for i in range(len(keypoints_xy)):
-            if keypoints_conf[i] < 0.5:
-                keypoints_xy[i] = np.nan  # Mark missing keypoints
-
-        # Interpolate missing keypoints
-        for j in range(17):
-            valid_mask = ~np.isnan(keypoints_xy[:, 0])  # Check which keypoints are valid
-            if valid_mask.sum() > 0:
-                keypoints_xy[:, 0] = np.interp(
-                    np.arange(len(keypoints_xy)), np.where(valid_mask)[0], keypoints_xy[valid_mask, 0]
-                )
-                keypoints_xy[:, 1] = np.interp(
-                    np.arange(len(keypoints_xy)), np.where(valid_mask)[0], keypoints_xy[valid_mask, 1]
-                )
-
-        # Replace NaNs with default values (center of image)
-        keypoints_xy = np.nan_to_num(keypoints_xy, nan=0.5)  # Default position (normalized to [0,1])
-
-        return keypoints_xy, keypoints_conf

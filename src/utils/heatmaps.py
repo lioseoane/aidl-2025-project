@@ -31,22 +31,23 @@ def generate_heatmaps(keypoints, output_size=(224, 224), sigma=1):
         
     return heatmaps
 
-
-import torch
-
 def extract_keypoints_with_confidence(heatmaps):
+    """
+    Extract keypoints from heatmaps with normalized confidence scores.
+    """
     B, num_keypoints, H, W = heatmaps.shape
 
-    # Normalize heatmaps before extracting peaks
-    heatmaps = heatmaps - heatmaps.min()  # Shift values to avoid negative scores
-    heatmaps = heatmaps / (heatmaps.max() + 1e-6)  # Normalize to [0, 1]
-
     # Reshape heatmaps to find the max index
-    heatmaps_flat = heatmaps.view(B, num_keypoints, -1)
-    heatmaps_softmax = F.softmax(heatmaps_flat, dim=2)  # Apply softmax along spatial dimension
+    heatmaps_flat = heatmaps.view(B, num_keypoints, -1)  # Shape: (B, num_keypoints, H*W)
 
     # Get max confidence and corresponding indices
-    confidences, indices = torch.max(heatmaps_softmax, dim=2)
+    confidences, indices = torch.max(heatmaps_flat, dim=2)  # (B, num_keypoints)
+
+    # Normalize confidence scores per heatmap (Min-Max Scaling)
+    min_conf = heatmaps_flat.min(dim=2, keepdim=True)[0]  # Min value per heatmap
+    max_conf = heatmaps_flat.max(dim=2, keepdim=True)[0]  # Max value per heatmap
+
+    confidences = heatmaps_flat.gather(2, indices.unsqueeze(2)).squeeze(2)
 
     # Convert flat indices to (x, y) coordinates
     x_coords = (indices % W).float()  # x coordinate
