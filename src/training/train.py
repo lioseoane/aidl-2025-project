@@ -5,7 +5,7 @@ import torch.optim as optim
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter  
 from src.utils.visualization import visualize_keypoints
-from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy, calculate_keypoint_average_precision
+from src.utils.metrics import calculate_classification_accuracy, calculate_bbox_accuracy, calculate_keypoint_average_precision
 from src.training.evaluate import evaluate_model
 from torch.amp import autocast, GradScaler
 from datetime import datetime

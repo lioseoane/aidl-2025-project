@@ -2,7 +2,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from src.utils.visualization import visualize_keypoints
-from src.utils.metrics import calculate_classification_accuracy, calculate_keypoint_accuracy, calculate_bbox_accuracy, calculate_keypoint_average_precision
+from src.utils.metrics import calculate_classification_accuracy, calculate_bbox_accuracy, calculate_keypoint_average_precision
 from torch.amp import autocast
 import os
 from src.utils.heatmaps import extract_keypoints_with_confidence
