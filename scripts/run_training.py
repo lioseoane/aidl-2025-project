@@ -9,14 +9,9 @@ from src.models.heatmap_lateral import heatmap_lateral
 from src.training.train import train_model
 import torch
 from datetime import datetime
-from torchvision import transforms
 
-# Transformations
-#transforms_resnet50 = transforms.Compose([
-    #transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-#])
 
-# Load data (images and keypoints)2
+# Load the workout data
 keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
 
 # Create dataloaders
@@ -35,14 +30,13 @@ train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, b
 num_classes = len(set(classes_array)) 
 num_keypoints = 17
 backbone_type = 'resnet50'
+# Select the model arquitecture
 model = heatmap_lateral(num_classes=num_classes, num_keypoints=num_keypoints, backbone=backbone_type)
 
 # Train the model
 train_model(train_loader, model, class_name_to_idx, num_epochs=75, val_loader=val_loader)
-#train_model(train_loader, model, class_name_to_idx, num_epochs=50, val_loader=None)
 
 # Save the trained model
-
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 model_save_path = f'./{backbone_type}_{timestamp}.pth'  # Specify the path to save the model
 torch.save(model.state_dict(), model_save_path)

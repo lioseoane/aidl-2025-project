@@ -17,47 +17,7 @@ def calculate_classification_accuracy(predicted_labels, true_labels, num_classes
     
     return accuracy, TP, FP, FN
 
-def calculate_keypoint_accuracy(predicted_keypoints, true_keypoints, threshold=0.01):
-    batch_size, num_keypoints, last_dim = predicted_keypoints.shape
-
-    if last_dim == 2:
-        # Already (x, y)
-        pred_xy = predicted_keypoints
-        true_xy = true_keypoints
-
-        # Assume all keypoints are visible
-        visible_mask = torch.ones(batch_size, num_keypoints, dtype=torch.bool)
-
-    elif last_dim == 3:
-        # Extract (x, y)
-        pred_xy = predicted_keypoints[:, :, :2]
-        true_xy = true_keypoints[:, :, :2]
-
-        # Extract visibility if it exists
-        if true_keypoints.shape[-1] == 3:
-            visibility = true_keypoints[:, :, 2] > 0  # Boolean mask where visibility > 0
-        else:
-            # If no visibility information, assume all keypoints are visible
-            visibility = torch.ones(batch_size, num_keypoints, dtype=torch.bool)
-
-        visible_mask = visibility
-
-    # Compute Euclidean distances
-    distances = torch.norm(pred_xy - true_xy, dim=-1)
-    
-    # Move to CUDA 
-    device = distances.device
-    visible_mask = visible_mask.to(device)
-
-    # Count correct keypoints within the threshold
-    correct_keypoints = ((distances < threshold) & visible_mask).sum().item()
-    total_visible_keypoints = visible_mask.sum().item()
-
-    # Calculate accuracy
-    accuracy = correct_keypoints / total_visible_keypoints if total_visible_keypoints > 0 else 0.0
-    return accuracy
-
-def calculate_keypoint_average_precision(predicted_keypoints, true_keypoints, threshold=0.001):
+def calculate_keypoint_average_precision(predicted_keypoints, true_keypoints, threshold=0.01):
     batch_size, num_keypoints, _ = predicted_keypoints.shape
 
     # Extract predicted coordinates and confidence
