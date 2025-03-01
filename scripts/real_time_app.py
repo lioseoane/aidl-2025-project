@@ -7,7 +7,7 @@ import torch
 import cv2
 from PIL import Image
 import numpy as np
-from src.models.heatmap_lateral import heatmap_lateral
+from src.models.heatmap_fpn import heatmap_lateral
 from torchvision import transforms
 from src.utils.heatmaps import extract_keypoints_with_confidence
 

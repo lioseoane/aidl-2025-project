@@ -6,11 +6,11 @@ import matplotlib.pyplot as plt
 import torch
 import cv2
 import numpy as np
-from src.models.heatmap_lateral import heatmap_lateral
+from src.models.heatmap_fpn import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence
 
 # Initialize model and load checkpoint
-model = heatmap_lateral(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
+model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 checkpoint_path = 'checkpoints/model_epoch_55.pth' # Model checkpoint
