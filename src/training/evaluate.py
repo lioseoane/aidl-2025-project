@@ -59,6 +59,7 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
                     "boxes": targets["boxes"][i].to(device),  # Bounding box for image i
                     "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
                     "keypoints": targets["heatmaps"][i].to(device),  # Keypoints for image i
+                    "confidences": targets["confidences"][i].to(device), 
                 })
 
             # Forward pass and Losses

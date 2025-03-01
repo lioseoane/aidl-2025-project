@@ -73,6 +73,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                     "boxes": targets["boxes"][i].to(device),  # Bounding box for image i
                     "workout_labels": targets["workout_labels"][i].to(device),  # Class label for image i
                     "keypoints": targets["heatmaps"][i].to(device),  # Keypoints for image i
+                    "confidences": targets["confidences"][i].to(device),  # Keypoints for image i
                 })
 
             optimizer.zero_grad()  # Zero the gradients before backward pass

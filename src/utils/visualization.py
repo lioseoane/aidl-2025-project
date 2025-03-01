@@ -36,16 +36,18 @@ def visualize_keypoints(image, predicted_keypoints, true_keypoints, img_width, i
                       (int(true_bbox[2]), int(true_bbox[3])), 
                       (0, 255, 0), 2)  # Green for true bbox
 
-    # Draw true keypoints (in green)
+    # Draw true keypoints (in green) if confidence >= 0.5
     for keypoint in true_keypoints:
-        x, y = keypoint[:2]  # Only take the x and y coordinates (ignoring any third value)
-        cv2.circle(image, (int(x), int(y)), 3, (0, 255, 0), -1)  # Green for true keypoints
+        x, y, confidence = keypoint  # Extract x, y, and confidence
+        if confidence >= 0.5:
+            cv2.circle(image, (int(x), int(y)), 3, (0, 255, 0), -1)  # Green for true keypoints
     
-    # Draw predicted keypoints (in red)
+    # Draw predicted keypoints (in red) if confidence >= 0.5
     for keypoint in predicted_keypoints:
-        x, y = keypoint[:2]  # Only take the x and y coordinates (ignoring any third value)
-        cv2.circle(image, (int(x), int(y)), 3, (0, 0, 255), -1)  # Red for predicted keypoints
-
+        x, y, confidence = keypoint  # Extract x, y, and confidence
+        if confidence >= 0.5:
+            cv2.circle(image, (int(x), int(y)), 3, (0, 0, 255), -1)  # Red for predicted keypoints
+            
     # Convert image back to CHW format for TensorBoard
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = np.transpose(image, (2, 0, 1))  # From HWC to CHW format
