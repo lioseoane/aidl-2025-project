@@ -82,13 +82,13 @@ AIDL-2025-PROJECT/
 ## Model
 ##### **baseline**
 During the project, We trained several models to improve keypoint regression. The **baseline** model used ResNet-50 followed by a fully connected (FC) layer for direct keypoint regression. However, this approach yielded poor results, struggling to capture spatial information effectively.
-![image info](./resources/baseline.jpg)
+![image info](resources/baseline.jpg)
 
 To improve performance, We introduced the **baseline_heatmap** model, which added a few deconvolution layers after the last ResNet layer and adopted a heatmap-based approach. This significantly improved the results, though accurately detecting all keypoints remained challenging.
-![image info](./resources/baseline_heatmap.jpg)
+![image info](resources/baseline_heatmap.jpg)
 
 Further refinement came with the **heatmap_fpn** model, which incorporated a Feature Pyramid Network (FPN) to enhance multi-scale feature extraction. This approach further improved keypoint detection, though there was still room for refinement to achieve full accuracy.
-![image info](./resources/heatmap_fpn.jpg)
+![image info](resources/heatmap_fpn.jpg)
 
 ## Results
 
