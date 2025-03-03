@@ -46,7 +46,7 @@ class KalmanFilterKeypoint:
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-state_dict = torch.load('checkpoints/model_epoch_54.pth', map_location=device, weights_only=True)
+state_dict = torch.load('checkpoints/model_epoch_100.pth', map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -169,7 +169,7 @@ while cap.isOpened():
     cv2.putText(frame, f'{predicted_class_name}', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         
-    cv2.imshow('Live App', frame)
+    cv2.imshow('Live Prediction', frame)
     
     # Press 'q' to exit
     if cv2.waitKey(1) & 0xFF == ord('q'):

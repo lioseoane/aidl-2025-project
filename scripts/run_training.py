@@ -15,8 +15,8 @@ keypoints_array, images_array, bounding_boxes_array, classes_array = load_workou
 
 # Create dataloaders
 train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, bounding_boxes_array, keypoints_array, 
-                                                                 classes_array, batch_size=16, resize_to=[360, 360], 
-                                                                 transforms=None, heatmap_size=[360, 360],
+                                                                 classes_array, batch_size=16, resize_to=[224, 224], 
+                                                                 transforms=None, heatmap_size=[224, 224],
                                                                  sigma=2)
 
 # Limit the training data to 1% --> To test any arquitecture across the whole enviroment
