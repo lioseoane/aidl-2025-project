@@ -12,6 +12,8 @@ from datetime import datetime
 from src.utils.heatmaps import extract_keypoints_with_confidence
 import matplotlib.cm as cm
 import numpy as np
+from torch.optim.lr_scheduler import StepLR
+
 
 
 def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="logs/train_logs", 
@@ -20,11 +22,20 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
     # Clear cache
     torch.cuda.empty_cache()
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)  # Initialize optimizer
+
+    # Optimizer
+    optimizer = optim.Adam([
+        {'params': model.fpn.parameters(), 'lr': 1e-4},  # FPN and unfrozen layers
+        {'params': model.workout_label_head.parameters(), 'lr': 1e-5},  
+        {'params': model.keypoints_head.parameters(), 'lr': 1e-4},
+        {'params': model.bbox_head.parameters(), 'lr': 1e-4},
+    ])
+    scheduler = StepLR(optimizer, step_size=50, gamma=0.1)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
 
     idx_to_class_name = {idx: class_name for class_name, idx in class_name_to_idx.items()}  # Reverse the mapping
+    num_classes = len(idx_to_class_name)
 
     model = model.to(device) # Move model to the same device as the data
     print(f"Using device: {device}")
@@ -49,9 +60,9 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
         # Initialize accumulators for accuracy metrics at the epoch level
         total_classification_correct = 0
         total_classification_count = 0
-        total_classification_TP = 0
-        total_classification_FP = 0
-        total_classification_FN = 0
+        total_TP = torch.zeros(num_classes, dtype=torch.float32, device=device)
+        total_FP = torch.zeros(num_classes, dtype=torch.float32, device=device)
+        total_FN = torch.zeros(num_classes, dtype=torch.float32, device=device)
 
         total_bbox_correct = 0
         total_bbox_count = 0
@@ -114,12 +125,14 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                 workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
                 class_accuracy, batch_TP, batch_FP, batch_FN = calculate_classification_accuracy(workout_label, 
                                                                                                  workout_label_targets, 
-                                                                                                 len(idx_to_class_name))
-                total_classification_correct += class_accuracy * len(workout_label_targets)
+                                                                                                 num_classes)
+
+                total_TP += batch_TP
+                total_FP += batch_FP
+                total_FN += batch_FN
+                correct_predictions = (torch.argmax(workout_label, dim=1) == torch.argmax(workout_label_targets, dim=1)).sum().item()
+                total_classification_correct += correct_predictions
                 total_classification_count += len(workout_label_targets)
-                total_classification_TP += batch_TP
-                total_classification_FP += batch_FP
-                total_classification_FN += batch_FN
 
                 # Calculate bbox accuracy
                 bbox_targets = torch.stack([target['boxes'] for target in new_targets])
@@ -206,22 +219,42 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
         writer.add_scalar("Epoch_Loss/Total", epoch_loss, epoch)
 
         # Compute epoch accuracies and log them
-        epoch_classification_accuracy = total_classification_correct / total_classification_count
         epoch_bbox_accuracy = total_bbox_correct / total_bbox_count
         epoch_keypoints_accuracy = total_keypoints_correct / total_keypoints_count
 
-        writer.add_scalar("Epoch_Accuracy/Classification_Accuracy", epoch_classification_accuracy, epoch)
         writer.add_scalar("Epoch_Accuracy/Keypoint_AP", epoch_keypoints_accuracy, epoch)
         writer.add_scalar("Epoch_Accuracy/BBox_IoU", epoch_bbox_accuracy, epoch)
 
+        # Compute per-class precision and recall at epoch level
+        precision_per_class = total_TP / (total_TP + total_FP)
+        precision_per_class[torch.isnan(precision_per_class)] = 0  # Handle division by zero
 
-        epoch_classification_precision = total_classification_TP / (total_classification_TP + total_classification_FP
-                                                                    ) if (total_classification_TP + total_classification_FP) > 0 else 0.0
-        epoch_classification_recall = total_classification_TP / (total_classification_TP + total_classification_FN
-                                                                 ) if (total_classification_TP + total_classification_FN) > 0 else 0.0
+        recall_per_class = total_TP / (total_TP + total_FN)
+        recall_per_class[torch.isnan(recall_per_class)] = 0  # Handle division by zero
 
-        #writer.add_scalar("Epoch_Accuracy/Classification_Precision", epoch_classification_precision, epoch)
-        #writer.add_scalar("Epoch_Accuracy/Classification_Recall", epoch_classification_recall, epoch)
+        # Compute macro and weighted averages
+        macro_precision = precision_per_class.mean().item()
+        macro_recall = recall_per_class.mean().item()
+
+        class_support = total_TP + total_FN  # Total actual instances per class
+        weighted_precision = (precision_per_class * class_support).sum().item() / class_support.sum().item()
+        weighted_recall = (recall_per_class * class_support).sum().item() / class_support.sum().item()
+
+        # Compute final classification accuracy
+        classification_accuracy = total_classification_correct / total_classification_count
+
+        # Log Precision, Recall, and Accuracy
+        writer.add_scalar("Epoch_Accuracy/Classification_Accuracy", classification_accuracy, epoch)
+        writer.add_scalar("Epoch_Accuracy/Classification_Precision_Macro", macro_precision, epoch)
+        writer.add_scalar("Epoch_Accuracy/Classification_Recall_Macro", macro_recall, epoch)
+        writer.add_scalar("Epoch_Accuracy/Classification_Precision_Weighted", weighted_precision, epoch)
+        writer.add_scalar("Epoch_Accuracy/Classification_Recall_Weighted", weighted_recall, epoch)
+
+        # Log per-class precision and recall
+        for cls in range(num_classes):
+            class_name = idx_to_class_name[cls]
+            writer.add_scalar(f"Epoch_Accuracy/Precision_{class_name}", precision_per_class[cls].item(), epoch)
+            writer.add_scalar(f"Epoch_Accuracy/Recall_{class_name}", recall_per_class[cls].item(), epoch)
 
         # Evaluate the model
         if val_loader != None:
@@ -231,6 +264,8 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
         checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch+1}.pth")
         torch.save(model.state_dict(), checkpoint_path)
         print(f"Model checkpoint saved at {checkpoint_path}")
+
+        scheduler.step()
 
         with open('idx_to_class_name.json', 'w') as f:
             json.dump(idx_to_class_name, f)

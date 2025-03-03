@@ -17,50 +17,11 @@ class heatmap_fpn(nn.Module):
             param.requires_grad = False
 
         # Feature Pyramid Lateral Connections
-        self.lateral1 = nn.Sequential(
-            nn.Conv2d(256, 256, kernel_size=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
-        self.lateral2 = nn.Sequential(
-            nn.Conv2d(512, 256, kernel_size=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
-        self.lateral3 = nn.Sequential(
-            nn.Conv2d(1024, 256, kernel_size=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
-        self.lateral4 = nn.Sequential(
-            nn.Conv2d(2048, 256, kernel_size=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
-
-        # Up-sampling layers to combine feature maps
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-
-        # Final smoothing convolutions
-        self.smooth1 = nn.Sequential(
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
-        self.smooth2 = nn.Sequential(
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
-        self.smooth3 = nn.Sequential(
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True)
-        )
+        self.fpn = FPNBlock(in_channels=[256, 512, 1024, 2048])
 
         self.bbox_head = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1), 
-            nn.Flatten(),  
+            nn.AdaptiveAvgPool2d(1),  # Global pooling
+            nn.Flatten(),
             nn.Linear(self.input_size, self.input_size),
             nn.ReLU(),
             nn.Linear(self.input_size, 4),
@@ -82,12 +43,12 @@ class heatmap_fpn(nn.Module):
         self.workout_label_head = nn.Sequential(
             nn.AdaptiveAvgPool2d(1), 
             nn.Flatten(),  
-            nn.Linear(self.input_size , self.input_size),
+            nn.Linear(self.input_size, self.input_size),
             nn.ReLU(),
             nn.Linear(self.input_size, num_classes)
         )
 
-        # Initialize only the heads, not the backbone:
+        # Initialize weights
         self.keypoints_head.apply(heatmap_fpn.init_weights)
 
     def forward(self, x):
@@ -101,18 +62,8 @@ class heatmap_fpn(nn.Module):
         feat3 = self.backbone.layer3(feat2)  # layer3 features
         feat4 = self.backbone.layer4(feat3)  # layer4 features
 
-        p4 = self.lateral4(feat4)  # (B, 256, H/32, W/32)
-        p3 = self.lateral3(feat3) + self.upsample(p4)  # (B, 256, H/16, W/16)
-        p3 = self.smooth3(p3)
-
-        p2 = self.lateral2(feat2) + self.upsample(p3)  # (B, 256, H/8, W/8)
-        p2 = self.smooth2(p2)
-
-        p1 = self.lateral1(feat1) + self.upsample(p2)  # (B, 256, H/4, W/4)
-        p1 = self.smooth1(p1)
-
-        # Final feature map to use for heads
-        final_feat = p1  # Highest resolution feature
+        # Feature Pyramid Network
+        final_feat = self.fpn(feat1, feat2, feat3, feat4)
         
         # bbox head, [batch_size, 4]
         bbox = self.bbox_head(feat4)
@@ -132,6 +83,7 @@ class heatmap_fpn(nn.Module):
 
         # Compute the bounding box loss
         bbox_loss = nn.MSELoss()(outputs[0], bbox_targets)
+        #bbox_loss = 1 - torchvision.ops.generalized_box_iou_loss(outputs[0], bbox_targets).mean()
 
         # Compute the keypoint loss
         keypoints_loss = nn.MSELoss(reduction='none')(outputs[1], keypoints_targets)
@@ -167,3 +119,46 @@ class heatmap_fpn(nn.Module):
         elif isinstance(m, nn.BatchNorm2d):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
+
+import torch.nn as nn
+import torch
+
+class FPNBlock(nn.Module):
+    def __init__(self, in_channels):
+        super(FPNBlock, self).__init__()
+
+        # Lateral connections (1x1 Conv to unify feature dimensions)
+        self.lateral1 = nn.Conv2d(in_channels[0], 256, kernel_size=1)
+        self.lateral2 = nn.Conv2d(in_channels[1], 256, kernel_size=1)
+        self.lateral3 = nn.Conv2d(in_channels[2], 256, kernel_size=1)
+        self.lateral4 = nn.Conv2d(in_channels[3], 256, kernel_size=1)
+
+        # Up-sampling layer (same for all levels)
+        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+
+        # Smoothing layers (Final 3x3 Conv to refine features)
+        self.smooth1 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.smooth2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.smooth3 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+
+        # Normalization layers
+        self.bn1 = nn.BatchNorm2d(256)
+        self.bn2 = nn.BatchNorm2d(256)
+        self.bn3 = nn.BatchNorm2d(256)
+        self.bn4 = nn.BatchNorm2d(256)
+
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, feat1, feat2, feat3, feat4):
+        # Lateral connections
+        p4 = self.relu(self.bn4(self.lateral4(feat4)))  # (B, 256, H/32, W/32)
+        p3 = self.relu(self.bn3(self.lateral3(feat3) + self.upsample(p4)))  # (B, 256, H/16, W/16)
+        p3 = self.relu(self.smooth3(p3))
+
+        p2 = self.relu(self.bn2(self.lateral2(feat2) + self.upsample(p3)))  # (B, 256, H/8, W/8)
+        p2 = self.relu(self.smooth2(p2))
+
+        p1 = self.relu(self.bn1(self.lateral1(feat1) + self.upsample(p2)))  # (B, 256, H/4, W/4)
+        p1 = self.relu(self.smooth1(p1))
+
+        return p1  # Highest resolution feature

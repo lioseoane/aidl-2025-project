@@ -17,6 +17,7 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
     model = model.to(device)
 
     idx_to_class_name = {idx: class_name for class_name, idx in class_name_to_idx.items()}  # Reverse the mapping
+    num_classes = len(idx_to_class_name)
 
     # Initialize TensorBoard writer
     log_dir_str = f'{log_dir}/{model.backbone_label}_{timestamp}'
@@ -33,11 +34,12 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
     val_loss = 0.0
 
     # Initialize accumulators for accuracy metrics at the epoch level
+    total_TP = torch.zeros(num_classes, dtype=torch.float32, device=device)
+    total_FP = torch.zeros(num_classes, dtype=torch.float32, device=device)
+    total_FN = torch.zeros(num_classes, dtype=torch.float32, device=device)
+
     total_classification_correct = 0
     total_classification_count = 0
-    total_classification_TP = 0
-    total_classification_FP = 0
-    total_classification_FN = 0
 
     total_bbox_correct = 0
     total_bbox_count = 0
@@ -91,12 +93,14 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
             workout_label_targets = torch.stack([target['workout_labels'] for target in new_targets]) 
             class_accuracy, batch_TP, batch_FP, batch_FN = calculate_classification_accuracy(workout_label, 
                                                                                              workout_label_targets, 
-                                                                                             len(idx_to_class_name))
-            total_classification_correct += class_accuracy * len(workout_label_targets)
+                                                                                             num_classes)
+            
+            total_TP += batch_TP
+            total_FP += batch_FP
+            total_FN += batch_FN
+            correct_predictions = (torch.argmax(workout_label, dim=1) == torch.argmax(workout_label_targets, dim=1)).sum().item()
+            total_classification_correct += correct_predictions
             total_classification_count += len(workout_label_targets)
-            total_classification_TP += batch_TP
-            total_classification_FP += batch_FP
-            total_classification_FN += batch_FN
 
             # Calculate bbox accuracy
             bbox_targets = torch.stack([target['boxes'] for target in new_targets])
@@ -159,8 +163,8 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
                     heatmap_target_tensor = torch.tensor(heatmap_target_colored).permute(2, 0, 1)
 
                     # Log heatmaps in TensorBoard
-                    writer.add_image(f"Heatmaps_Pred/{i}", heatmap_pred_tensor, num_epoch, dataformats="CHW")
-                    writer.add_image(f"Heatmaps_Target/{i}", heatmap_target_tensor, num_epoch, dataformats="CHW")
+                    writer.add_image(f"Validation_Heatmaps_Pred/{i}", heatmap_pred_tensor, num_epoch, dataformats="CHW")
+                    writer.add_image(f"Validation_Heatmaps_Target/{i}", heatmap_target_tensor, num_epoch, dataformats="CHW")
 
     # Compute average validation loss
     avg_val_keypoint_loss = val_keypoint_loss / len(val_loader)
@@ -173,21 +177,42 @@ def evaluate_model(val_loader, model, class_name_to_idx, log_dir="logs/val_logs"
     writer.add_scalar("Validation_Loss/Total", avg_val_loss, num_epoch) 
 
      # Compute epoch accuracies and log them
-    val_classification_accuracy = total_classification_correct / total_classification_count
     val_bbox_accuracy = total_bbox_correct / total_bbox_count
     val_keypoints_accuracy = total_keypoints_correct / total_keypoints_count
-
-    writer.add_scalar("Validation_Accuracy/Classification_Accuracy", val_classification_accuracy, num_epoch)
     writer.add_scalar("Validation_Accuracy/Keypoint_AP", val_keypoints_accuracy, num_epoch)
     writer.add_scalar("Validation_Accuracy/BBox_IoU", val_bbox_accuracy, num_epoch)
 
-    val_classification_precision = total_classification_TP / (total_classification_TP + total_classification_FP
-                                                                    ) if (total_classification_TP + total_classification_FP) > 0 else 0.0
-    val_classification_recall = total_classification_TP / (total_classification_TP + total_classification_FN
-                                                                 ) if (total_classification_TP + total_classification_FN) > 0 else 0.0
+    # Compute per-class precision and recall at epoch level
+    precision_per_class = total_TP / (total_TP + total_FP)
+    precision_per_class[torch.isnan(precision_per_class)] = 0  # Handle division by zero
 
-    #writer.add_scalar("Validation_Accuracy/Classification_Precision", val_classification_precision, num_epoch)
-    #writer.add_scalar("Validation_Accuracy/Classification_Recall", val_classification_recall, num_epoch)
+    recall_per_class = total_TP / (total_TP + total_FN)
+    recall_per_class[torch.isnan(recall_per_class)] = 0  # Handle division by zero
+
+    # Compute macro and weighted averages
+    macro_precision = precision_per_class.mean().item()
+    macro_recall = recall_per_class.mean().item()
+
+    class_support = total_TP + total_FN  # Total actual instances per class
+    weighted_precision = (precision_per_class * class_support).sum().item() / class_support.sum().item()
+    weighted_recall = (recall_per_class * class_support).sum().item() / class_support.sum().item()
+
+    # Compute final classification accuracy
+    val_classification_accuracy = total_classification_correct / total_classification_count
+
+    # Log Precision, Recall, and Accuracy
+    writer.add_scalar("Validation_Accuracy/Classification_Accuracy", val_classification_accuracy, num_epoch)
+    writer.add_scalar("Validation_Accuracy/Classification_Precision_Macro", macro_precision, num_epoch)
+    writer.add_scalar("Validation_Accuracy/Classification_Recall_Macro", macro_recall, num_epoch)
+    writer.add_scalar("Validation_Accuracy/Classification_Precision_Weighted", weighted_precision, num_epoch)
+    writer.add_scalar("Validation_Accuracy/Classification_Recall_Weighted", weighted_recall, num_epoch)
+
+    # Log per-class precision and recall
+    for cls in range(num_classes):
+        class_name = idx_to_class_name[cls]
+        writer.add_scalar(f"Validation_Accuracy/Precision_{class_name}", precision_per_class[cls].item(), num_epoch)
+        writer.add_scalar(f"Validation_Accuracy/Recall_{class_name}", recall_per_class[cls].item(), num_epoch)
+
 
     # Close the TensorBoard writer
     writer.close()

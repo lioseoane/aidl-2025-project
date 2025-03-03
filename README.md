@@ -80,6 +80,7 @@ AIDL-2025-PROJECT/
 ## Dataset
 
 ## Model
+![image info](./resources/baseline.jpg)
 
 ## Results
 

@@ -6,16 +6,23 @@ def calculate_classification_accuracy(predicted_labels, true_labels, num_classes
     predicted_labels = torch.argmax(predicted_labels, dim=1)
     true_labels = torch.argmax(true_labels, dim=1)
 
-    # Count correct predictions
-    correct = (predicted_labels == true_labels).sum().item()  
-    accuracy = correct / len(true_labels)  
+    # Initialize per-class TP, FP, FN
+    TP = torch.zeros(num_classes, dtype=torch.float32, device=predicted_labels.device)
+    FP = torch.zeros(num_classes, dtype=torch.float32, device=predicted_labels.device)
+    FN = torch.zeros(num_classes, dtype=torch.float32, device=predicted_labels.device)
 
-    # Initialize variables for overall precision and recall
-    TP = ((predicted_labels == true_labels) & (true_labels != -1)).sum().item()  # True Positives (ignoring padding)
-    FP = ((predicted_labels != true_labels) & (true_labels != -1)).sum().item()  # False Positives (ignoring padding)
-    FN = ((predicted_labels != true_labels) & (true_labels != -1)).sum().item()  # False Negatives (ignoring padding)
-    
-    return accuracy, TP, FP, FN
+    # Compute per-class TP, FP, FN
+    for cls in range(num_classes):
+        TP[cls] = ((predicted_labels == cls) & (true_labels == cls)).sum()
+        FP[cls] = ((predicted_labels == cls) & (true_labels != cls)).sum()
+        FN[cls] = ((predicted_labels != cls) & (true_labels == cls)).sum()
+
+    # Compute classification accuracy
+    correct_predictions = (predicted_labels == true_labels).sum().item()
+    total_samples = len(true_labels)
+    classification_accuracy = correct_predictions / total_samples if total_samples > 0 else 0.0
+
+    return classification_accuracy, TP, FP, FN
 
 def calculate_keypoint_average_precision(predicted_keypoints, true_keypoints, threshold=0.01):
     batch_size, num_keypoints, _ = predicted_keypoints.shape
