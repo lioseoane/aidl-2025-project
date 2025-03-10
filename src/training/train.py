@@ -9,7 +9,7 @@ from src.utils.metrics import calculate_classification_accuracy, calculate_bbox_
 from src.training.evaluate import evaluate_model
 from torch.amp import autocast, GradScaler
 from datetime import datetime
-from src.utils.heatmaps import extract_keypoints_with_confidence
+from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 import matplotlib.cm as cm
 import numpy as np
 from torch.optim.lr_scheduler import StepLR
@@ -17,20 +17,19 @@ from torch.optim.lr_scheduler import StepLR
 
 
 def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="logs/train_logs", 
-                checkpoint_dir="checkpoints", val_loader=None):
+                checkpoint_dir="checkpoints", val_loader=None, model_save_path=None, autocast_enabled=True):
 
     # Clear cache
     torch.cuda.empty_cache()
 
-
     # Optimizer
     optimizer = optim.Adam([
         {'params': model.fpn.parameters(), 'lr': 1e-4},  # FPN and unfrozen layers
-        {'params': model.workout_label_head.parameters(), 'lr': 1e-5},  
+        {'params': model.workout_label_head.parameters(), 'lr': 4e-6},  
         {'params': model.keypoints_head.parameters(), 'lr': 1e-4},
         {'params': model.bbox_head.parameters(), 'lr': 1e-4},
     ])
-    scheduler = StepLR(optimizer, step_size=50, gamma=0.1)
+    scheduler = StepLR(optimizer, step_size=80, gamma=0.1)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
 
@@ -87,29 +86,38 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                     "confidences": targets["confidences"][i].to(device),  # Keypoints for image i
                 })
 
+            #rpn_targets = []
+            #for i in range(len(targets["boxes"])):
+                #gt_boxes = targets["boxes"][i].to(device)
+
+                # Fix shape if necessary
+                #if gt_boxes.ndim == 1:
+                    #gt_boxes = gt_boxes.unsqueeze(0)
+
+                #rpn_targets.append({"boxes": gt_boxes})
+
+
             optimizer.zero_grad()  # Zero the gradients before backward pass
 
-            # Forward pass and Losses
-            with autocast("cuda"):  # Automatically uses FP16 where it can
-                output = model(images) 
-                boxes_loss, keypoints_loss, classification_loss = model.compute_losses(output, new_targets) # Losses
-
-            loss_dict = {
-                "classification_loss": classification_loss,
-                "boxes_loss": boxes_loss,
-                "keypoints_loss": keypoints_loss,
-            }
-
-            classification_loss = loss_dict["classification_loss"]
-            keypoint_loss = loss_dict["keypoints_loss"]
-            bbox_loss = loss_dict["boxes_loss"]
+            if autocast_enabled:
+                with autocast("cuda"):  # Autocast only when enabled
+                    output = model(images)
+                    bbox_loss, keypoint_loss, classification_loss = model.compute_losses(output, new_targets)
+            else:
+                output = model(images)  # Normal FP32
+                bbox_loss, keypoint_loss, classification_loss = model.compute_losses(output, new_targets)
 
             total_loss = classification_loss + keypoint_loss + bbox_loss
 
-            scaler.scale(total_loss).backward()  # Backpropagate the loss (with scaled gradients)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
-            scaler.step(optimizer)  # Update model weights
-            scaler.update()  # Update the scale for next iteration
+            if autocast_enabled:
+                scaler.scale(total_loss).backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                total_loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
+                optimizer.step()
 
             running_classification_loss += classification_loss.item()
             running_keypoint_loss += keypoint_loss.item()
@@ -134,11 +142,14 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                 total_classification_correct += correct_predictions
                 total_classification_count += len(workout_label_targets)
 
-                # Calculate bbox accuracy
+                # Evaluate
                 bbox_targets = torch.stack([target['boxes'] for target in new_targets])
-                bbox_accuracy = calculate_bbox_accuracy(bbox, bbox_targets)
+                bbox_from_heatmaps = extract_bbox_from_heatmaps(bbox)
+                bbox_targets_from_heatmaps = extract_bbox_from_heatmaps(bbox_targets)
+                bbox_accuracy = calculate_bbox_accuracy(bbox_from_heatmaps, bbox_targets_from_heatmaps)
                 total_bbox_correct += bbox_accuracy * len(bbox_targets)
                 total_bbox_count += len(bbox_targets)
+
 
                 # Calculate keypoint accuracy
                 keypoints_targets = torch.stack([target['keypoints'] for target in new_targets])
@@ -170,8 +181,8 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                             keypoints_targets_from_heatmaps[i].cpu().numpy(), 
                             sample_image.shape[2], 
                             sample_image.shape[1], 
-                            bbox[i].cpu().detach().numpy(), 
-                            bbox_targets[i].cpu().detach().numpy()
+                            bbox_from_heatmaps[i].cpu().detach().numpy(), 
+                            bbox_targets_from_heatmaps[i].cpu().detach().numpy()
                         )
 
                         # Log the visualization to TensorBoard
@@ -206,6 +217,22 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
                         writer.add_image(f"Heatmaps_Pred/{i}", heatmap_pred_tensor, epoch, dataformats="CHW")
                         writer.add_image(f"Heatmaps_Target/{i}", heatmap_target_tensor, epoch, dataformats="CHW")
 
+                        # Normalize if necessary (values must be in [0, 1] for cm.jet)
+                        bbox_pred = np.clip(bbox[i].cpu().detach().numpy(), 0, 1)
+                        bbox_target = np.clip(bbox_targets[i].cpu().detach().numpy(), 0, 1)
+
+                        # Apply jet colormap (convert to RGB)
+                        bbox_pred_colored = cm.jet(bbox_pred)[:, :, :3]  # Drop alpha channel
+                        bbox_target_colored = cm.jet(bbox_target)[:, :, :3]
+
+                        # Convert to tensor (C, H, W)
+                        bbox_pred_tensor = torch.tensor(bbox_pred_colored).permute(2, 0, 1)
+                        bbox_target_tensor = torch.tensor(bbox_target_colored).permute(2, 0, 1)
+
+                        # Log heatmaps in TensorBoard
+                        writer.add_image(f"BBox_Heatmaps_Pred/{i}", bbox_pred_tensor, epoch, dataformats="CHW")
+                        writer.add_image(f"BBox_Heatmaps_Target/{i}", bbox_target_tensor, epoch, dataformats="CHW")
+
             model.train()
 
         # Compute epoch loss and log it
@@ -217,6 +244,10 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
         writer.add_scalar("Epoch_Loss/Keypoint", epoch_keypoint_loss, epoch)
         writer.add_scalar("Epoch_Loss/BBox", epoch_bbox_loss, epoch)
         writer.add_scalar("Epoch_Loss/Total", epoch_loss, epoch)
+        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.6f}")
+        print(f"  Classification Loss: {epoch_classification_loss:.6f}")
+        print(f"  Keypoint Loss: {epoch_keypoint_loss:.6f}")
+        print(f"  BBox Loss: {epoch_bbox_loss:.6f}")
 
         # Compute epoch accuracies and log them
         epoch_bbox_accuracy = total_bbox_correct / total_bbox_count
@@ -267,7 +298,12 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
         scheduler.step()
 
-        with open('idx_to_class_name.json', 'w') as f:
-            json.dump(idx_to_class_name, f)
-
     writer.close()
+
+    if model_save_path is None:
+        file_name = 'idx_to_class_name.json'
+    else:
+        file_name = f'{model_save_path}.json'
+
+    with open(f'{file_name}', 'w') as f:
+        json.dump(idx_to_class_name, f)

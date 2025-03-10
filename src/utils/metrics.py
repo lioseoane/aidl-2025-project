@@ -68,6 +68,16 @@ def calculate_keypoint_average_precision(predicted_keypoints, true_keypoints, th
     return ap.item()
 
 def calculate_bbox_accuracy(predicted_boxes, true_boxes, threshold=0.7):
+
+    if predicted_boxes.ndim == 1:
+        predicted_boxes = predicted_boxes.unsqueeze(0)
+
+    if true_boxes.ndim == 1:
+        true_boxes = true_boxes.unsqueeze(0)
+
+    device = predicted_boxes.device
+    true_boxes = true_boxes.to(device)
+    
     # Get the intersection coordinates
     x1 = torch.max(predicted_boxes[:, 0], true_boxes[:, 0])  # Left x-coordinate
     y1 = torch.max(predicted_boxes[:, 1], true_boxes[:, 1])  # Top y-coordinate

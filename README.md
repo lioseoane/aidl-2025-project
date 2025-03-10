@@ -79,8 +79,7 @@ AIDL-2025-PROJECT/
 
 ## Dataset
 
-## Model
-##### **baseline**
+## Models
 During the project, We trained several models to improve keypoint regression. The **baseline** model used ResNet-50 followed by a fully connected (FC) layer for direct keypoint regression. However, this approach yielded poor results, struggling to capture spatial information effectively.
 ![image info](resources/baseline.jpg)
 

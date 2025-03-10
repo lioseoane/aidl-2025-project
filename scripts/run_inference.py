@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 import torch
 import cv2
 import numpy as np
-from src.models.heatmap_fpn import heatmap_fpn
-from src.utils.heatmaps import extract_keypoints_with_confidence
+from src.models.heatmap_fpn_v2 import heatmap_fpn
+from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
 # Initialize model and load checkpoint
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_55.pth' # Model checkpoint
+checkpoint_path = 'checkpoints/model_epoch_5.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
@@ -50,29 +50,38 @@ image_preprocessed = np.transpose(image_preprocessed, (1, 2, 0))
 with torch.no_grad():
     output = model(preprocessed_image_tensor)
 
-bbox_pred = output[0]               # Predicted bounding boxes
-heatmap_pred = output[1]            # Heatmap tensor [1, 17, H, W]
+bbox_heatmap_pred = output[0]               
+bbox_pred = extract_bbox_from_heatmaps(output[0]) 
+heatmap_pred = output[1]            
 keypoints_pred = extract_keypoints_with_confidence(heatmap_pred)
+
+bbox_heatmap_final = bbox_heatmap_pred.squeeze(0).cpu().detach().numpy()
 
 # Sum the heatmap over the keypoint channels to get a single [H, W] array
 summed_heatmap = np.sum(heatmap_pred.cpu().detach().numpy(), axis=(0, 1))
+
+for bbox in bbox_pred:
+    x_min, y_min, x_max, y_max = bbox
+    cv2.rectangle(image_preprocessed, (int(x_min * target_w), int(y_min * target_h)), (int(x_max * target_w), int(y_max * target_h)), (0, 255, 0), 1)
 
 # Draw keypoints on the original image
 filtered_keypoints = []
 for i, point in enumerate(keypoints_pred[0]):
     x, y, confidence = point
-    if confidence >= 0.5:  # Only draw visible keypoints
+    if confidence >= 0.3:  # Only draw visible keypoints
         cv2.circle(image_preprocessed, (int(x * target_w), int(y * target_h)), 1, (1, 0, 0), -1)  # Red dots for keypoints
         filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
 
 SKELETON = [
-    (0, 1), (1, 2), (2, 3), (2, 4),  # Nose -> Left Eye -> Right Eye, Right Eye -> Right Ear, Left Eye -> Left Ear
-    (5, 6),                          # Left Shoulder -> Right Shoulder
-    (5, 7), (7, 9),                  # Left Shoulder -> Left Elbow -> Left Wrist
-    (6, 8), (8, 10),                 # Right Shoulder -> Right Elbow -> Right Wrist
-    (5, 11), (6, 12),                # Left Shoulder -> Left Hip, Right Shoulder -> Right Hip
-    (11, 13), (13, 15),              # Left Hip -> Left Knee -> Left Ankle
-    (12, 14), (14, 16)               # Right Hip -> Right Knee -> Right Ankle
+    (0, 1), (1, 2), (2, 0),     # Nose -> Left Eye -> Right Eye -> Nose,
+    (1, 3),                     # Left Eye -> Left Ear
+    (2, 4),                     # Right Eye -> Right Ear
+    (5, 6),                     # Left Shoulder -> Right Shoulder
+    (5, 7), (7, 9),             # Left Shoulder -> Left Elbow -> Left Wrist
+    (6, 8), (8, 10),            # Right Shoulder -> Right Elbow -> Right Wrist
+    (5, 11), (6, 12),           # Left Shoulder -> Left Hip, Right Shoulder -> Right Hip
+    (11, 13), (13, 15),         # Left Hip -> Left Knee -> Left Ankle
+    (12, 14), (14, 16)          # Right Hip -> Right Knee -> Right Ankle
 ]
 
 # Draw the skeleton using only valid keypoints
@@ -87,7 +96,7 @@ for pair in SKELETON:
 
 
 # Create a figure with two subplots
-fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+fig, axs = plt.subplots(1, 3, figsize=(12, 6))
 
 # Display the preprocessed image with keypoints
 axs[0].imshow(image_preprocessed)
@@ -98,6 +107,11 @@ axs[0].axis("off")
 axs[1].imshow(summed_heatmap, cmap="jet")
 axs[1].set_title("Keypoint Heatmap Predicted")
 axs[1].axis("off")
+
+# Display the predicted heatmap
+axs[2].imshow(bbox_heatmap_final, cmap="jet")
+axs[2].set_title("BBox Heatmap Predicted")
+axs[2].axis("off")
 
 plt.tight_layout()
 plt.show()
