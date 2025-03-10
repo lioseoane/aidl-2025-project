@@ -12,7 +12,8 @@ def create_dataloaders(image_paths,
                        random_seed=42, 
                        transforms=None,
                        heatmap_size=[224, 224],
-                       sigma = 1):
+                       sigma = 1,
+                       apply_flip = True):
 
     # Split the data into training and validation sets
     train_image_paths, val_image_paths, train_bounding_boxes, val_bounding_boxes, train_keypoints, val_keypoints, train_class_names, val_class_names = train_test_split(
@@ -21,9 +22,10 @@ def create_dataloaders(image_paths,
 
     # Initialize the datasets for both training and validation sets
     train_dataset = WorkoutDataset(train_image_paths, train_bounding_boxes, train_keypoints, train_class_names, resize_to=resize_to, 
-                                   transform=transforms, heatmap_size=heatmap_size, sigma=sigma)
+                                   transform=transforms, heatmap_size=heatmap_size, sigma=sigma, apply_flip=apply_flip)
     val_dataset = WorkoutDataset(val_image_paths, val_bounding_boxes, val_keypoints, val_class_names, resize_to=resize_to, 
-                                 transform=transforms, class_name_to_idx=train_dataset.class_name_to_idx, heatmap_size=heatmap_size, sigma=sigma)
+                                 transform=transforms, class_name_to_idx=train_dataset.class_name_to_idx, heatmap_size=heatmap_size, 
+                                 sigma=sigma, apply_flip=apply_flip)
 
     # Create the DataLoader instances for both datasets
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)

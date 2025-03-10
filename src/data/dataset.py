@@ -2,7 +2,20 @@ from torch.utils.data import Dataset
 import cv2
 import torch
 import numpy as np
-from src.utils.heatmaps import generate_heatmaps, extract_keypoints_with_confidence
+from src.utils.heatmaps import generate_heatmaps, generate_bbox_heatmaps
+import random
+
+# Define the left-right keypoint pairs
+FLIP_PAIRS = [
+    (1, 2), 
+    (3, 4),  # Eyes
+    (5, 6),  # Shoulders
+    (7, 8),  # Elbows
+    (9, 10),  # Wrists
+    (11, 12),  # Hips
+    (13, 14),  # Knees
+    (15, 16)   # Ankles
+]
 
 class WorkoutDataset(Dataset):
     def __init__(self, 
@@ -14,7 +27,8 @@ class WorkoutDataset(Dataset):
                  transform=None, 
                  class_name_to_idx=None, 
                  heatmap_size=[224, 224],
-                 sigma = 1):
+                 sigma = 1,
+                 apply_flip=True):
         
         self.image_paths = image_paths
         self.bounding_boxes = bounding_boxes
@@ -23,6 +37,7 @@ class WorkoutDataset(Dataset):
         self.resize_to = resize_to
         self.heatmap_size = heatmap_size
         self.sigma = sigma
+        self.apply_flip = apply_flip
 
         # Create a class-to-index mapping
         if class_name_to_idx:
@@ -97,20 +112,33 @@ class WorkoutDataset(Dataset):
             bbox = bbox / [target_w, target_h, target_w, target_h]
             keypoints_xy /= [target_w, target_h]
 
+
+         # Horizontal Flip Augmentation
+        random_int =  random.random()
+        if self.apply_flip and random_int < 0.5:
+            image = cv2.flip(image, 1)  # Flip horizontally
+
+            # Flip bounding box (x-coordinates only)
+            bbox[[0, 2]] = 1 - bbox[[2, 0]]  # Swap x_min and x_max
+
+            # Flip keypoints (x-coordinates)
+            keypoints_xy[:, 0] = 1 - keypoints_xy[:, 0]
+
+            # Swap left-right keypoints
+            for left, right in FLIP_PAIRS:
+                keypoints_xy[[left, right]] = keypoints_xy[[right, left]]
+                keypoints_conf[[left, right]] = keypoints_conf[[right, left]]   
+
         if keypoints_conf is not None:
             keypoints_xy[keypoints_conf < 0.5] = 0
 
         keypoints_conf[keypoints_conf < 0.5] = 0.0
         
-        keypoints_fixed = np.hstack([keypoints_xy, keypoints_conf[:, None]])  # ✅ Correctly reshaped
-
-        #bbox_denorm = bbox * [target_w, target_h, target_w, target_h]
-        #keypoints_denorm_xy = keypoints_xy * [target_w, target_h]
+        keypoints_fixed = np.hstack([keypoints_xy, keypoints_conf[:, None]])  # Concatenate x, y, confidence
 
         # Convert to tensors
         image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
-        bbox_tensor = torch.tensor(bbox, dtype=torch.float32) # Normalized based bbox [0, 1]
-        #rois_tensor = torch.tensor(bbox_denorm, dtype=torch.float32) # Denormalized based bbox [x, y]
+        bbox_tensor = generate_bbox_heatmaps(bbox, heatmap_size=tuple(self.heatmap_size))
 
         keypoints_tensor = torch.tensor(keypoints_fixed, dtype=torch.float32) # Normalized based keypoints [0, 1]
         heatmaps_tensor = generate_heatmaps(keypoints_fixed, output_size=tuple(self.heatmap_size), sigma=self.sigma)

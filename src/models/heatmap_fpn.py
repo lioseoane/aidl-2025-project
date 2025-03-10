@@ -16,6 +16,13 @@ class heatmap_fpn(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = False
 
+        for param in self.backbone.layer3.parameters():  
+            param.requires_grad = True
+
+        for param in self.backbone.layer4.parameters(): 
+            param.requires_grad = True
+
+
         # Feature Pyramid Lateral Connections
         self.fpn = FPNBlock(in_channels=[256, 512, 1024, 2048])
 
@@ -119,9 +126,6 @@ class heatmap_fpn(nn.Module):
         elif isinstance(m, nn.BatchNorm2d):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
-
-import torch.nn as nn
-import torch
 
 class FPNBlock(nn.Module):
     def __init__(self, in_channels):
