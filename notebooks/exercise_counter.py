@@ -2,53 +2,14 @@ import time
 import cv2
 import numpy as np
 from ultralytics import YOLO
-from google.colab.patches import cv2_imshow
+import os
+import glob
 
-
+# Load YOLOv8 Pose Model
 MODEL = YOLO('yolov8x-pose.pt')
 
-def calculate_position(angle: float, key_body_part: str) -> str:
-    """
-    Determine the current position ("start", "medium", or "end") based on the
-    calculated angle and the key body part.
-
-    Parameters:
-        angle (float): The computed joint angle.
-        key_body_part (str): One of "upper body", "lower body", or "whole body".
-
-    Returns:
-        str: "start", "medium", or "end"
-    """
-    # Define example thresholds for each key body part.
-    thresholds = {
-        "upper body": {"start": 120, "end": 100},    # e.g., for push-ups or bench press
-        "lower body": {"start": 150, "end": 100},     # e.g., for squats or deadlifts
-        "whole body": {"start": 130, "end": 110}      # if needed
-    }
-
-    if key_body_part not in thresholds:
-        raise ValueError(f"Unsupported key_body_part: {key_body_part}")
-
-    start_th = thresholds[key_body_part]["start"]
-    end_th   = thresholds[key_body_part]["end"]
-
-    if angle >= start_th:
-        return "start"
-    elif angle <= end_th:
-        return "end"
-    else:
-        return "medium"
-
+# Function to calculate angle between three points
 def calculate_angle(a: list, b: list, c: list) -> float:
-    """
-    Calculate the angle (in degrees) at point b formed by the segments ab and cb.
-
-    Parameters:
-        a, b, c (list): Coordinates of the points [x, y].
-
-    Returns:
-        float: The angle in degrees.
-    """
     a, b, c = np.array(a), np.array(b), np.array(c)
     radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
     angle = np.abs(radians * 180.0 / np.pi)
@@ -56,168 +17,133 @@ def calculate_angle(a: list, b: list, c: list) -> float:
         angle = 360.0 - angle
     return angle
 
+# Function to create video from frames
+def frames_to_video(frames_dir, output_filename="output_video.mp4", fps=30):
+    frame_files = sorted(glob.glob(os.path.join(frames_dir, "*.jpg")))
+    if not frame_files:
+        print("No frames found. Video creation aborted.")
+        return
+
+    first_frame = cv2.imread(frame_files[0])
+    height, width, _ = first_frame.shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_filename, fourcc, fps, (width, height))
+
+    for frame_file in frame_files:
+        frame = cv2.imread(frame_file)
+        out.write(frame)
+    
+    out.release()
+    print(f"Video saved successfully: {output_filename}")
+
+# Exercise Counter Class
 class ExerciseCounter:
     def __init__(self, conf_threshold: float = 0.5):
-        self.counter: int = 0
-        self.stage: str = None  # Represents the current position ("start", "medium", or "end")
+        self.counter = 0
+        self.stage = None
         self.conf_threshold = conf_threshold
 
-    def _get_angle(self, keypoints: np.ndarray, kp_confs: np.ndarray, indices: tuple) -> float:
-        """
-        Compute an angle only if all keypoints specified by the indices have sufficient confidence.
-
-        Parameters:
-            keypoints (np.ndarray): Array of keypoint coordinates.
-            kp_confs (np.ndarray): Array of confidence scores for each keypoint.
-            indices (tuple): A triplet of indices for angle calculation.
-
-        Returns:
-            float or None: The angle in degrees if valid; otherwise, None.
-        """
-        if all(kp_confs[i] >= self.conf_threshold for i in indices):
+    def _get_angle(self, keypoints, kp_confs, indices):
+        if all(i < len(keypoints) and kp_confs[i] >= self.conf_threshold for i in indices):
             return calculate_angle(keypoints[indices[0]], keypoints[indices[1]], keypoints[indices[2]])
-        else:
-            return None
+        return None
 
-    def _process_counter_exercise(self, frame: np.ndarray, keypoints: np.ndarray, kp_confs: np.ndarray,
-                                  bbox, left_indices: tuple, right_indices: tuple, key_body_part: str) -> np.ndarray:
-        """
-        Unified processing for counter exercises.
+    def process_frame(self, frame, keypoints, kp_confs, bbox, exercise_type):
+        left_indices, right_indices, key_body_part = {
+            "deadlift": ((11, 13, 15), (12, 14, 16), "whole body"),
+            "squat": ((11, 13, 15), (12, 14, 16), "lower body"),
+            "push-up": ((5, 7, 9), (6, 8, 10), "upper body"),
+            "benchpress": ((5, 7, 9), (6, 8, 10), "upper body")
+        }.get(exercise_type, (None, None, None))
 
-        Parameters:
-            frame (np.ndarray): The current video frame.
-            keypoints (np.ndarray): Detected pose keypoints.
-            kp_confs (np.ndarray): Confidence scores for keypoints.
-            bbox: Bounding box of the detected person.
-            left_indices (tuple): Keypoint indices for one side (e.g. left side).
-            right_indices (tuple): Keypoint indices for the opposite side.
-            key_body_part (str): Specifies which body segment is being used ("upper body" or "lower body").
-
-        Returns:
-            np.ndarray: The frame with overlay (bounding box and counter).
-        """
-        left_angle = self._get_angle(keypoints, kp_confs, left_indices)
-        right_angle = self._get_angle(keypoints, kp_confs, right_indices)
-        print(f"Angle: Left: {left_angle}, Right: {right_angle}")
-
-        # Use available angle(s)
-        if left_angle is not None and right_angle is not None:
-            angle = (left_angle + right_angle) / 2.0
-        elif left_angle is not None:
-            angle = left_angle
-        elif right_angle is not None:
-            angle = right_angle
-        else:
-            return frame  # Skip frame if no valid angle
-
-        # Get the current position using our unified calculate_position function.
-        new_position = calculate_position(angle, key_body_part)
-        if new_position == "medium":
-            new_position = self.stage
-        print(f"{key_body_part.capitalize()} angle: {angle:.1f} -> Position: {new_position}")
-
-        # Count a rep when a full cycle is detected: transition from "end" to "start".
-        if self.stage == "end" and new_position == "start":
-            self.counter += 1
-        self.stage = new_position
-
-        # Draw a bounding box and overlay the counter.
-        cv2.rectangle(frame,
-                      (int(bbox[0]), int(bbox[1])),
-                      (int(bbox[2]), int(bbox[3])),
-                      (0, 255, 0), 2)
-        cv2.putText(frame, f'Reps: {self.counter}', (10, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        return frame
-
-    # For counter–based exercises, we now simply call _process_counter_exercise with the appropriate parameters.
-    def _process_pushup(self, frame: np.ndarray, keypoints: np.ndarray, kp_confs: np.ndarray, bbox) -> np.ndarray:
-        return self._process_counter_exercise(frame, keypoints, kp_confs, bbox,
-                                                left_indices=(5, 7, 9), right_indices=(6, 8, 10),
-                                                key_body_part="upper body")
-
-    def _process_bench_press(self, frame: np.ndarray, keypoints: np.ndarray, kp_confs: np.ndarray, bbox) -> np.ndarray:
-        return self._process_counter_exercise(frame, keypoints, kp_confs, bbox,
-                                                left_indices=(5, 7, 9), right_indices=(6, 8, 10),
-                                                key_body_part="upper body")
-
-    def _process_squat(self, frame: np.ndarray, keypoints: np.ndarray, kp_confs: np.ndarray, bbox) -> np.ndarray:
-        return self._process_counter_exercise(frame, keypoints, kp_confs, bbox,
-                                                left_indices=(11, 13, 15), right_indices=(12, 14, 16),
-                                                key_body_part="lower body")
-
-    def _process_deadlift(self, frame: np.ndarray, keypoints: np.ndarray, kp_confs: np.ndarray, bbox) -> np.ndarray:
-        return self._process_counter_exercise(frame, keypoints, kp_confs, bbox,
-                                                left_indices=(11, 13, 15), right_indices=(12, 14, 16),
-                                                key_body_part="whole body")
-
-    def process_frame(self, frame: np.ndarray, keypoints: np.ndarray, kp_confs: np.ndarray,
-                      bbox, exercise_type: str) -> np.ndarray:
-        """
-        Dispatch processing to the appropriate exercise method.
-        """
-        exercise_funcs = {
-            "push-up": self._process_pushup,
-            "benchpress": self._process_bench_press,
-            "squat": self._process_squat,
-            "deadlift": self._process_deadlift
-        }
-        if exercise_type in exercise_funcs:
-            return exercise_funcs[exercise_type](frame, keypoints, kp_confs, bbox)
-        else:
+        if not left_indices:
             return frame
 
-def main(exercise: str):
-    video_path = f"/content/drive/MyDrive/data/human_pose_exercise/{exercise}_sample.mp4"
+        left_angle = self._get_angle(keypoints, kp_confs, left_indices)
+        right_angle = self._get_angle(keypoints, kp_confs, right_indices)
+        angle = (left_angle + right_angle) / 2.0 if left_angle and right_angle else left_angle or right_angle
+        if angle is None or any(i >= len(keypoints) for i in left_indices + right_indices):
+            print("Skipping frame due to missing keypoints")
+            return frame
+
+        thresholds = {
+            "upper body": {"start": 120, "end": 100},
+            "lower body": {"start": 150, "end": 100},
+            "whole body": {"start": 130, "end": 110}
+        }
+        
+        if key_body_part not in thresholds:
+            raise ValueError(f"Unsupported key_body_part: {key_body_part}")
+
+        start_th = thresholds[key_body_part]["start"]
+        end_th = thresholds[key_body_part]["end"]
+
+        if angle >= start_th:
+            new_stage = "start"
+        elif angle <= end_th:
+            new_stage = "end"
+        else:
+            new_stage = self.stage
+        if self.stage == "end" and new_stage == "start":
+            self.counter += 1
+        self.stage = new_stage
+
+        # Draw keypoints
+        for x, y in keypoints:
+            cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
+
+        # Draw skeleton
+        skeleton_pairs = [(5, 7), (7, 9), (6, 8), (8, 10), (5, 11), (6, 12), (11, 13), (13, 15), (12, 14), (14, 16)]
+        for i, j in skeleton_pairs:
+            if i >= len(keypoints) or j >= len(keypoints) or keypoints[i][0] == 0 or keypoints[i][1] == 0 or keypoints[j][0] == 0 or keypoints[j][1] == 0:
+                continue  # Skip if any keypoint is out of frame
+            if i < len(keypoints) and j < len(keypoints):
+                cv2.line(frame, (int(keypoints[i][0]), int(keypoints[i][1])),
+                         (int(keypoints[j][0]), int(keypoints[j][1])), (255, 0, 0), 2)
+                
+        cv2.putText(frame, f'Reps: {self.counter} | Stage: {self.stage}', (50, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
+        return frame
+
+# Main Processing Function
+def main(exercise):
+    video_path = f"/home/asala/Desktop/aidl-2025-project/notebooks/video_samples/{exercise}_sample.mp4"
+    output_frames_dir = "/home/asala/Desktop/aidl-2025-project/notebooks/output_frames/"
+    output_video_path = f"/home/asala/Desktop/aidl-2025-project/notebooks/{exercise}_processed.mp4"
+    os.makedirs(output_frames_dir, exist_ok=True)
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"Error: Unable to open video file {video_path}")
         return
-    counter = ExerciseCounter(conf_threshold=0.5)
-
-    video_fps = cap.get(cv2.CAP_PROP_FPS)
-    if video_fps <= 0:
-        print("Warning: Could not determine FPS, defaulting to 30")
-        video_fps = 30
-    print(f"Video FPS: {video_fps}")
-    # For rep-based exercises, process every frame or use a small skip.
-    skip_frames = 4 if exercise in ["squat", "push-up", "benchpress", "deadlift"] else int(video_fps)
-    print(f"Skipping every {skip_frames} frames for {exercise}")
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    print(f"Total frames in video: {total_frames}")
+    
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    counter = ExerciseCounter()
     frame_index = 0
-    while True:
+
+    while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
 
-        if frame_index % skip_frames == 0:
-            result = MODEL(frame)
-            boxes = result[0].boxes.xyxy.cpu().numpy() if result[0].boxes else []
-            print(boxes)
-            if result[0].keypoints is not None:
-                keypoints = result[0].keypoints.xy.cpu().numpy()[0]
-                kp_confs = result[0].keypoints.conf.cpu().numpy()[0]
-                print("Keypoint confidences:", kp_confs)
-            else:
-                keypoints, kp_confs = None, None
+        result = MODEL(frame)
+        if result[0].keypoints is not None and len(result[0].keypoints.xy.cpu().numpy()[0]) >= 17:
+            keypoints = result[0].keypoints.xy.cpu().numpy()[0]
+            kp_confs = result[0].keypoints.conf.cpu().numpy()[0]
+            bbox = result[0].boxes.xyxy.cpu().numpy()[0] if result[0].boxes else None
+            frame = counter.process_frame(frame, keypoints, kp_confs, bbox, exercise)
 
-            if boxes is not None and len(boxes) > 0 and keypoints is not None and kp_confs is not None:
-                bbox = boxes[0]
-                frame = counter.process_frame(frame, keypoints, kp_confs, bbox, exercise)
-                # Optionally display the full plotted result
-                img_full = result[0].plot()
-                height, width = img_full.shape[:2]
-                img_resized = cv2.resize(img_full, (width // 2, height // 2), interpolation=cv2.INTER_AREA)
-                cv2_imshow(img_resized)
-
+        frame_filename = os.path.join(output_frames_dir, f"frame_{frame_index:04d}.jpg")
+        cv2.imwrite(frame_filename, frame)
         frame_index += 1
 
     cap.release()
     cv2.destroyAllWindows()
     print(f"Final {exercise} count: {counter.counter}")
+    frames_to_video(output_frames_dir, output_video_path, fps)
 
 if __name__ == "__main__":
-    # Choose an exercise: "push-up", "benchpress", "squat" or "deadlift"
-    exercise_type = "deadlift"
-    main(exercise_type)
+    IMAGE_DIR = "/home/codespace/aidl-2025-project/notebooks/output_frames/"
+    for file in glob.glob(os.path.join(IMAGE_DIR, "*.jpg")):
+        os.remove(file)
+    main("squat")
