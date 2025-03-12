@@ -6,7 +6,7 @@ import json
 import torch
 import cv2
 import numpy as np
-from src.models.heatmap_fpn_v2 import heatmap_fpn
+from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
 # Kalmar fiter --> Get smoothed keypoints
@@ -46,7 +46,7 @@ class KalmanFilterKeypoint:
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-state_dict = torch.load('checkpoints/model_epoch_10.pth', map_location=device, weights_only=True)
+state_dict = torch.load('checkpoints/model_epoch_34.pth', map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -63,12 +63,16 @@ SKELETON = [
     (12, 14), (14, 16)          # Right Hip -> Right Knee -> Right Ankle
 ]
 
+keypoint_mapping = ['Nose', 'Left Eye', 'Right Eye', 'Left Ear', 'Right Year', 'Left Shoulder', 'Right Shoulder',
+                    'Left Elbow', 'Right Elbow', 'Left Wrist', 'Right Wrist', 'Left Hip', 'Right Hip', 'Left Knee',
+                    'Right Knee', 'Left Ankle', 'Right Ankle']
+
 # Initialize Kalman filters for all keypoints
 num_keypoints = 17
 kalman_filters = [KalmanFilterKeypoint() for _ in range(num_keypoints)]
 
 # Confidence threshold for keypoints
-confidence_threshold = 0.3
+confidence_threshold = 0.5
 
 # predict the model
 def predict(frame):
@@ -119,8 +123,8 @@ cv2.namedWindow('Live Prediction', cv2.WINDOW_NORMAL)
 cv2.resizeWindow('Live Prediction', size_x, size_y)
 
 # Load idx_to_class_name during inference
-with open('idx_to_class_name.json', 'r') as f:
-    idx_to_class_name = json.load(f)
+#with open('idx_to_class_name.json', 'r') as f:
+    #idx_to_class_name = json.load(f)
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -162,8 +166,17 @@ while cap.isOpened():
             kalman_filters[i].update(x, y)  # Update Kalman filter
             x, y = kalman_filters[i].predict()  # Get smoothed keypoints
             cv2.circle(frame, (int(x * size_x), int(y * size_y)), 1, (0, 0, 255), -1)  # Red dots for keypoints
-            cv2.putText(frame, str(i), (int(x * size_x) + 10, int(y * size_y) - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA) 
+            if i == 0:
+                padding_x = 0
+                padding_y = 10
+            elif i % 2 == 0:
+                padding_x = -10
+                adding_y = -10
+            else:
+                padding_x = 10
+                padding_y = -10
+            cv2.putText(frame, keypoint_mapping[i], (int(x * size_x) + padding_x, int(y * size_y) + padding_y),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1, cv2.LINE_AA) 
             filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
 
     # Draw the skeleton 
@@ -178,17 +191,18 @@ while cap.isOpened():
 
 
     # Display workout class and probability
-    probabilities = torch.softmax(workout_label_pred[0], dim=0) 
-    predicted_class_idx = torch.argmax(probabilities).item()
-    predicted_class_name = idx_to_class_name[str(predicted_class_idx)]  # Map index to class name
+    #probabilities = torch.softmax(workout_label_pred[0], dim=0) 
+    #predicted_class_idx = torch.argmax(probabilities).item()
+    #predicted_class_name = idx_to_class_name[str(predicted_class_idx)]  # Map index to class name
 
-    if probabilities[predicted_class_idx].item() > 0.7:   
-        cv2.putText(frame, 'Workout Label:', (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        cv2.putText(frame, f'{predicted_class_name}', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    else:
-        cv2.putText(frame, 'Workout Label:', (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        cv2.putText(frame, 'Unknown', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+    #if probabilities[predicted_class_idx].item() > 0.75:   
+        #colour = (0, 255, 0)
+    #else:
+        #colour = (0, 0, 255)
+
+    #cv2.putText(frame, 'Workout Label:', (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
+    #cv2.putText(frame, f'{predicted_class_name}', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
+    #cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
             
     # Display the frame
     cv2.imshow('Live Prediction', frame)

@@ -12,7 +12,7 @@ def create_dataloaders(image_paths,
                        random_seed=42, 
                        transforms=None,
                        heatmap_size=[224, 224],
-                       sigma = 1,
+                       sigma = 2,
                        apply_flip = True):
 
     # Split the data into training and validation sets
