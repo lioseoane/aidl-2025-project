@@ -5,13 +5,13 @@ import numpy as np
 from src.utils.heatmaps import generate_heatmaps, generate_bbox_heatmaps
 import random
 
-# Define the left-right keypoint pairs
+# Define the pairs of keypoints to flip
 FLIP_PAIRS = [
-    (1, 2), 
-    (3, 4),  # Eyes
-    (5, 6),  # Shoulders
-    (7, 8),  # Elbows
-    (9, 10),  # Wrists
+    (1, 2),    # Ears 
+    (3, 4),    # Eyes
+    (5, 6),    # Shoulders
+    (7, 8),    # Elbows
+    (9, 10),   # Wrists
     (11, 12),  # Hips
     (13, 14),  # Knees
     (15, 16)   # Ankles
@@ -27,7 +27,7 @@ class WorkoutDataset(Dataset):
                  transform=None, 
                  class_name_to_idx=None, 
                  heatmap_size=[224, 224],
-                 sigma = 1,
+                 sigma = 2,
                  apply_flip=True):
         
         self.image_paths = image_paths
@@ -38,16 +38,15 @@ class WorkoutDataset(Dataset):
         self.heatmap_size = heatmap_size
         self.sigma = sigma
         self.apply_flip = apply_flip
+        self.transform = transform
 
-        # Create a class-to-index mapping
+        # Create a mapping from class name to class index
         if class_name_to_idx:
             self.class_name_to_idx = class_name_to_idx
         else:
             self.class_name_to_idx = {class_name: idx for idx, class_name in enumerate(set(class_names))}
-
-        self.num_classes = len(self.class_name_to_idx)
-
-        self.transform = transform
+        
+        self.num_classes = len(self.class_name_to_idx) # Number of classes
 
     def __len__(self):
         return len(self.image_paths)
@@ -69,6 +68,7 @@ class WorkoutDataset(Dataset):
         h, w, _ = image.shape
         target_w, target_h = self.resize_to
 
+        # Calculate the scale factor
         scale_w = target_w / float(w)
         scale_h = target_h / float(h)
 
@@ -83,14 +83,15 @@ class WorkoutDataset(Dataset):
             keypoints_xy = keypoints  # No confidence dimension
             keypoints_conf = None
 
+        # Resize the image
         scale = min(scale_w, scale_h)
         new_w, new_h = int(w * scale), int(h * scale)
         image = cv2.resize(image, (new_w, new_h))
 
+        # Rescale the bounding box and keypoints if padding is needed
         if scale_w != scale_h:
-            # Rescale to the resized image size
-            bbox = bbox * [new_w, new_h, new_w, new_h]
-            keypoints_xy *= [new_w, new_h]
+            bbox = bbox * [new_w, new_h, new_w, new_h] # Denormalize
+            keypoints_xy *= [new_w, new_h] # Denormalize
 
             # Calculate padding
             pad_top = (target_h  - new_h) // 2
@@ -104,7 +105,7 @@ class WorkoutDataset(Dataset):
                 borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0]
             )
                 
-            # Add padding
+            # Add padding to bounding box and keypoints
             bbox += [pad_left, pad_top, pad_left, pad_top]
             keypoints_xy += [pad_left, pad_top]
 
@@ -113,8 +114,8 @@ class WorkoutDataset(Dataset):
             keypoints_xy /= [target_w, target_h]
 
 
-         # Horizontal Flip Augmentation
-        random_int =  random.random()
+        # Horizontal Flip Augmentation
+        random_int = random.random()
         if self.apply_flip and random_int < 0.5:
             image = cv2.flip(image, 1)  # Flip horizontally
 
@@ -129,22 +130,23 @@ class WorkoutDataset(Dataset):
                 keypoints_xy[[left, right]] = keypoints_xy[[right, left]]
                 keypoints_conf[[left, right]] = keypoints_conf[[right, left]]   
 
+        # If keypoints_conf is not None, set to 0 if confidence is below 0.5
         if keypoints_conf is not None:
             keypoints_xy[keypoints_conf < 0.5] = 0
-
+        # Set confidence to 0 if below 0.5
         keypoints_conf[keypoints_conf < 0.5] = 0.0
         
-        keypoints_fixed = np.hstack([keypoints_xy, keypoints_conf[:, None]])  # Concatenate x, y, confidence
+        # Concatenate keypoints and confidence
+        keypoints_fixed = np.hstack([keypoints_xy, keypoints_conf[:, None]]) 
 
         # Convert to tensors
         image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
         bbox_tensor = generate_bbox_heatmaps(bbox, heatmap_size=tuple(self.heatmap_size))
-
-        keypoints_tensor = torch.tensor(keypoints_fixed, dtype=torch.float32) # Normalized based keypoints [0, 1]
+        # keypoints_tensor = torch.tensor(keypoints_fixed, dtype=torch.float32) # Normalized based keypoints [0, 1]
         heatmaps_tensor = generate_heatmaps(keypoints_fixed, output_size=tuple(self.heatmap_size), sigma=self.sigma)
         confidences_tensor = torch.tensor(keypoints_conf[:, None], dtype=torch.float32) 
 
-
+        # Create one-hot encoded tensor for the class label
         class_label_one_hot = torch.zeros(self.num_classes, dtype=torch.int64)
         if class_label >= 0:  # Only assign if the class label is valid
             class_label_one_hot[class_label] = 1
@@ -152,13 +154,12 @@ class WorkoutDataset(Dataset):
         # Create the target dictionary
         target = {
             'boxes': bbox_tensor,
-            #'labels': torch.tensor([1], dtype=torch.int64),
             'workout_labels': class_label_one_hot,
             #'keypoints': keypoints_tensor,
             'confidences': confidences_tensor,
             'heatmaps': heatmaps_tensor,
-            'filenames': image_filename,
-            'workout_label_names': class_name
+            #'filenames': image_filename,
+            #'workout_label_names': class_name
         }
 
         return image_tensor, target

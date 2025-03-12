@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 import torch
 import cv2
 import numpy as np
-from src.models.heatmap_fpn_v2 import heatmap_fpn
+from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
 # Initialize model and load checkpoint
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_5.pth' # Model checkpoint
+checkpoint_path = 'checkpoints/model_epoch_37.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
@@ -68,7 +68,7 @@ for bbox in bbox_pred:
 filtered_keypoints = []
 for i, point in enumerate(keypoints_pred[0]):
     x, y, confidence = point
-    if confidence >= 0.3:  # Only draw visible keypoints
+    if confidence >= 0.5:  # Only draw visible keypoints
         cv2.circle(image_preprocessed, (int(x * target_w), int(y * target_h)), 1, (1, 0, 0), -1)  # Red dots for keypoints
         filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
 

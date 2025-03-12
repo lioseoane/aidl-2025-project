@@ -16,13 +16,6 @@ class heatmap_fpn(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = False
 
-        for param in self.backbone.layer3.parameters():  
-            param.requires_grad = True
-
-        for param in self.backbone.layer4.parameters(): 
-            param.requires_grad = True
-
-
         # Feature Pyramid Lateral Connections
         self.fpn = FPNBlock(in_channels=[256, 512, 1024, 2048])
 
@@ -93,7 +86,6 @@ class heatmap_fpn(nn.Module):
 
         # Compute the bounding box loss
         bbox_loss = nn.MSELoss()(outputs[0], bbox_targets)
-        #bbox_loss = 1 - torchvision.ops.generalized_box_iou_loss(outputs[0], bbox_targets).mean()
 
         # Compute the keypoint loss
         keypoints_loss = nn.MSELoss(reduction='none')(outputs[1], keypoints_targets)
@@ -109,16 +101,6 @@ class heatmap_fpn(nn.Module):
     
     @staticmethod
     def init_weights(m):
-        # For convolutional layers
-        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-            # mean defaults to 0, but you can be explicit:
-            nn.init.normal_(m.weight, mean=0, std=0.001)
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        # For BatchNorm layers
-        elif isinstance(m, nn.BatchNorm2d):
-            nn.init.constant_(m.weight, 1)
-            nn.init.constant_(m.bias, 0)
         # For convolutional layers
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
             # mean defaults to 0, but you can be explicit:
