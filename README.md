@@ -182,10 +182,22 @@ This head enables the model to classify the workout in parallel with keypoint an
     - Framework
 
 
-
 ## Results
 - Small experiment comparing arquitectures (10 epochs)
+
+    | Model               | Keypoint MPJPE & PCK@0.01 (%) | BBox IoU (%) | Workout Class. Precision & Recall (%) |
+    |---------------------|-------------------------------|--------------|---------------------------------------|
+    | Baseline FC         | XX.X  &  XX.X                 | XX.X         | XX.X  &  XX.X                         |
+    | Baseline Heatmap    | XX.X  &  XX.X                 | XX.X         | XX.X  &  XX.X                         |
+    | Heatmap FPN v3      | XX.X  &  XX.X                 | XX.X         | XX.X  &  XX.X                         |
+    - Comparison in losses
+    - Accuracy
+    - Images from test
+
 - Final training (200 epochs)
+    - Losses
+    - Accuracy
+    - Images from test
 - Inference:
 
 ## Conclusions
@@ -202,9 +214,15 @@ In the current implementation, hyperparameters—such as learning rate, loss wei
 ## Biblography
 
 <a id="1">1.</a> Adrian Bulat and Georgios Tzimiropoulos. 2016. [Human pose estimation via convolutional part heatmap regression](https://arxiv.org/pdf/1609.01743)
+
 <a id="2">2.</a> B. Xiao, H. Wu, and Y. Wei. [Simple baselines for human pose estimation and tracking](https://arxiv.org/pdf/1804.06208). In Proceedings of the European conference on computer vision (ECCV), 2018
+
 <a id="3">3.</a> Wei Yang, Shuang Li, Wanli Ouyang, Hongsheng Li, and Xiaogang Wang. 2017. [Learning feature pyramids for human pose estimation](https://arxiv.org/pdf/1708.01101). In proceedings of the IEEE international conference on computer vision. 1281–1290
+
 <a id="4">4.</a> Haoming Chen, Runyang Feng, Sifan Wu, Hao Xu, Fengcheng Zhou, Zhenguang Liu. [2D Human pose estimation: a survey](https://arxiv.org/pdf/2204.07370). Multim. Syst. 29(5): 3115-3138 (2023)
-<a id="5">5.</a> Xu, Y., Zhang, J., Zhang, Q. & Tao, D. [Vitpose: Simple vision transformer baselines for human pose estimation](https://arxiv.org/pdf/2204.12484). Adv. Neural Inf. Process. Syst. 35, 38571–38584 (2022).
-<a id="6">6.</a> Khanam, R.; Hussain, M. [YOLOv11: An Overview of the Key Architectural Enhancements](https://arxiv.org/pdf/2410.17725). arXiv 2024, arXiv:2410.17725.
-<a id="7">7.</a> Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385). *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, 2016.
+
+<a id="5">5.</a> Xu, Y., Zhang, J., Zhang, Q. & Tao, D. [Vitpose: Simple vision transformer baselines for human pose estimation](https://arxiv.org/pdf/2204.12484). Adv. Neural Inf. Process. Syst. 35, 38571–38584 (2022)
+
+<a id="6">6.</a> Khanam, R.; Hussain, M. [YOLOv11: An Overview of the Key Architectural Enhancements](https://arxiv.org/pdf/2410.17725). arXiv 2024, arXiv:2410.17725
+
+<a id="7">7.</a> Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385). *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, 2016
