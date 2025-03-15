@@ -1,48 +1,56 @@
 import os
 import json
+import numpy as np
+import matplotlib.cm as cm
+from tqdm import tqdm
+
 import torch
 import torch.optim as optim
-from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter  
+from torch.amp import autocast, GradScaler
+from torch.optim.lr_scheduler import StepLR
+
 from src.utils.visualization import visualize_keypoints
 from src.utils.metrics import calculate_classification_accuracy, calculate_bbox_accuracy, calculate_keypoint_accuracy
 from src.training.evaluate import evaluate_model
-from torch.amp import autocast, GradScaler
-from datetime import datetime
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
-import matplotlib.cm as cm
-import numpy as np
-from torch.optim.lr_scheduler import StepLR
 
 def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="logs/", checkpoint_dir="checkpoints", 
                 val_loader=None, model_tag=None, autocast_enabled=True, loss_weights=[1, 1, 1], resize_to=[224, 224], 
-                lr=1e-4, pck_thresholds=[0.01, 0.05, 0.1]):
+                lr=[1e-4, 1e-3, 1e-4, 1e-3], pck_thresholds=[0.01, 0.05, 0.1]):
 
     # Clear cache
     torch.cuda.empty_cache()
 
     # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    # optimizer = optim.Adam([
-        #{'params': model.fpn.parameters(), 'lr': 1e-4}, 
-        #{'params': model.workout_label_head.parameters(), 'lr': 4e-6},  
-        #{'params': model.keypoints_head.parameters(), 'lr': 1e-4},
-        #{'params': model.bbox_head.parameters(), 'lr': 1e-4},
-    #])
+    optimizer = optim.Adam([
+        {'params': model.fpn.parameters(), 'lr': lr[0]}, 
+        {'params': model.workout_label_head.parameters(), 'lr': lr[1]},  
+        {'params': model.keypoints_head.parameters(), 'lr':lr[2]},
+        {'params': model.bbox_head.parameters(), 'lr': lr[3]},
+    ])
 
     # Learning rate scheduler
-    scheduler = StepLR(optimizer, step_size=80, gamma=0.1)
+    scheduler = StepLR(optimizer, step_size=100, gamma=0.1)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Use GPU if available
 
     idx_to_class_name = {idx: class_name for class_name, idx in class_name_to_idx.items()}  # Reverse the mapping
     num_classes = len(idx_to_class_name)
 
+    if model_tag is None:
+        file_name = 'idx_to_class_name.json'
+    else:
+        file_name = f'{model_tag}.json'
+    
+    # Save the idx_to_class_name mapping
+    with open(f'{file_name}', 'w') as f:
+        json.dump(idx_to_class_name, f)
+
     model = model.to(device) # Move model to the same device as the data
     print(f"Using device: {device}")
     
     # Create logs folder and initialize TensorBoard writer
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_dir_str = f'{log_dir}/{model_tag}/train_logs'
     os.makedirs(log_dir_str, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir_str) # Initialize TensorBoard writer
@@ -55,6 +63,12 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
     # Training loop
     for epoch in range(num_epochs):
+
+        # Freeze workout parameters after 8 epochs
+        if epoch == 8:
+            for param in model.workout_label_head.parameters():
+                param.requires_grad = False
+
         model.train()  # Set model to training mode
         running_loss = 0.0
         running_classification_loss= 0.0
@@ -312,13 +326,3 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
     # Close the TensorBoard writer
     writer.close()
-    
-    # Save the model
-    if model_tag is None:
-        file_name = 'idx_to_class_name.json'
-    else:
-        file_name = f'{model_tag}.json'
-    
-    # Save the idx_to_class_name mapping
-    with open(f'{file_name}', 'w') as f:
-        json.dump(idx_to_class_name, f)

@@ -1,11 +1,13 @@
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-import matplotlib.pyplot as plt
-import torch
 import cv2
 import numpy as np
+import json
+import matplotlib.pyplot as plt
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+import torch
+
 from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
@@ -13,7 +15,7 @@ from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_f
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_37.pth' # Model checkpoint
+checkpoint_path = 'checkpoints/model_epoch_78.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
@@ -54,6 +56,7 @@ bbox_heatmap_pred = output[0]
 bbox_pred = extract_bbox_from_heatmaps(output[0]) 
 heatmap_pred = output[1]            
 keypoints_pred = extract_keypoints_with_confidence(heatmap_pred)
+workout_label_pred = output[2] 
 
 bbox_heatmap_final = bbox_heatmap_pred.squeeze(0).cpu().detach().numpy()
 
@@ -64,7 +67,7 @@ for bbox in bbox_pred:
     x_min, y_min, x_max, y_max = bbox
     cv2.rectangle(image_preprocessed, (int(x_min * target_w), int(y_min * target_h)), (int(x_max * target_w), int(y_max * target_h)), (0, 255, 0), 1)
 
-# Draw keypoints on the original image
+# Draw keypoints on the original image1
 filtered_keypoints = []
 for i, point in enumerate(keypoints_pred[0]):
     x, y, confidence = point
@@ -94,6 +97,15 @@ for pair in SKELETON:
         cv2.line(image_preprocessed, (int(x1 * target_w), int(y1 * target_h)), 
                      (int(x2 * target_w), int(y2 * target_h)), (0, 0, 255), 1)  # Blue lines
 
+
+with open('resnet50_2025-03-13_22-01-38.json', 'r') as f:
+    idx_to_class_name = json.load(f)
+
+# Display workout class and probability
+probabilities = torch.softmax(workout_label_pred[0], dim=0) 
+predicted_class_idx = torch.argmax(probabilities).item()
+predicted_class_name = idx_to_class_name[str(predicted_class_idx)]  # Map index to class name
+print(predicted_class_name, " - prob: ",  probabilities[predicted_class_idx].item())
 
 # Create a figure with two subplots
 fig, axs = plt.subplots(1, 3, figsize=(12, 6))

@@ -1,11 +1,12 @@
 import os
 import sys
+import cv2
+import json
+import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import json
 import torch
-import cv2
-import numpy as np
+
 from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
@@ -46,7 +47,7 @@ class KalmanFilterKeypoint:
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-state_dict = torch.load('checkpoints/model_epoch_34.pth', map_location=device, weights_only=True)
+state_dict = torch.load('checkpoints/model_epoch_78.pth', map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -123,8 +124,8 @@ cv2.namedWindow('Live Prediction', cv2.WINDOW_NORMAL)
 cv2.resizeWindow('Live Prediction', size_x, size_y)
 
 # Load idx_to_class_name during inference
-#with open('idx_to_class_name.json', 'r') as f:
-    #idx_to_class_name = json.load(f)
+with open('resnet50_2025-03-13_22-01-38.json', 'r') as f:
+    idx_to_class_name = json.load(f)
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -171,7 +172,7 @@ while cap.isOpened():
                 padding_y = 10
             elif i % 2 == 0:
                 padding_x = -10
-                adding_y = -10
+                padding_y = -10
             else:
                 padding_x = 10
                 padding_y = -10
@@ -191,18 +192,18 @@ while cap.isOpened():
 
 
     # Display workout class and probability
-    #probabilities = torch.softmax(workout_label_pred[0], dim=0) 
-    #predicted_class_idx = torch.argmax(probabilities).item()
-    #predicted_class_name = idx_to_class_name[str(predicted_class_idx)]  # Map index to class name
+    probabilities = torch.softmax(workout_label_pred[0], dim=0) 
+    predicted_class_idx = torch.argmax(probabilities).item()
+    predicted_class_name = idx_to_class_name[str(predicted_class_idx)]  # Map index to class name
 
-    #if probabilities[predicted_class_idx].item() > 0.75:   
-        #colour = (0, 255, 0)
-    #else:
-        #colour = (0, 0, 255)
+    if probabilities[predicted_class_idx].item() > 0.75:   
+        colour = (0, 255, 0)
+    else:
+        colour = (0, 0, 255)
 
-    #cv2.putText(frame, 'Workout Label:', (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
-    #cv2.putText(frame, f'{predicted_class_name}', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
-    #cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
+    cv2.putText(frame, 'Workout Label:', (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
+    cv2.putText(frame, f'{predicted_class_name}', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
+    cv2.putText(frame, f'{probabilities[predicted_class_idx].item():.2f}', (5, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 2)
             
     # Display the frame
     cv2.imshow('Live Prediction', frame)
