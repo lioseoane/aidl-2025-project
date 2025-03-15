@@ -47,7 +47,7 @@ class KalmanFilterKeypoint:
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-state_dict = torch.load('checkpoints/model_epoch_15.pth', map_location=device, weights_only=True)
+state_dict = torch.load('checkpoints/model_epoch_10.pth', map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -97,6 +97,9 @@ def predict(frame):
     )
 
     sample_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+    sample_tensor = (sample_tensor - mean) / std
     sample_tensor = sample_tensor.unsqueeze(0).to(device)
 
     with torch.no_grad():

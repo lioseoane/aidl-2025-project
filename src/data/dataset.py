@@ -2,6 +2,7 @@ import cv2
 import torch
 import numpy as np
 import random
+from PIL import Image
 
 from torch.utils.data import Dataset
 
@@ -141,8 +142,17 @@ class WorkoutDataset(Dataset):
         # Concatenate keypoints and confidence
         keypoints_fixed = np.hstack([keypoints_xy, keypoints_conf[:, None]]) 
 
-        # Convert to tensors
-        image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
+        # Convert images to tensors
+        if self.transform:
+            # Convert image to PIL for torchvision transforms
+            image = Image.fromarray(image)
+            image = self.transform(image)
+            image_tensor = image
+        else:
+            # Fallback if no transform passed
+            image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize manually
+        
+        # Convert targets to tensors
         bbox_tensor = generate_bbox_heatmaps(bbox, heatmap_size=tuple(self.heatmap_size))
         # keypoints_tensor = torch.tensor(keypoints_fixed, dtype=torch.float32) # Normalized based keypoints [0, 1]
         heatmaps_tensor = generate_heatmaps(keypoints_fixed, output_size=tuple(self.heatmap_size), sigma=self.sigma)
