@@ -10,48 +10,68 @@ from src.data.load_workout_data import load_workout_data
 from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.training.train import train_model
 
-# Set the hyperparameters
-resize_to = [352, 352] # Resize the input image to this size
-batch_size = 16 # Batch size
-sigma = 1.5 # Sigma for the gaussian kernel
-apply_flip = True # Apply flip augmentation
-num_epochs = 250 # Number of epochs
-loss_weights = [0.003, 0.9, 0.097] # Classification, keypoint loss and bounding box weights respectively
-autocast_enabled = True # Enable automatic mixed precision
-num_keypoints = 17 # Number of keypoints
-lr = [1e-4, 1e-3, 2e-4, 1e-3]  # Learning rate [fpn, workout class, keypoints, bbox]
-pck_thresholds = [0.01, 0.05, 0.1] # PCK thresholds
-test_mode = False # Test mode
-test_sampling = 0.05
+def main():
+    # Set the hyperparameters
+    resize_to = [352, 352]  # Resize the input image to this size
+    batch_size = 24  # Batch size
+    sigma = 2  # Sigma for the gaussian kernel
+    apply_flip = True  # Apply flip augmentation
+    num_epochs = 250  # Number of epochs
+    loss_weights = [0.003, 0.9, 0.097]  # Classification, keypoint loss and bounding box weights respectively
+    autocast_enabled = True  # Enable automatic mixed precision
+    num_keypoints = 17  # Number of keypoints
+    lr = [1e-4, 1e-3, 2e-4, 1e-3]  # Learning rate [fpn, workout class, keypoints, bbox]
+    pck_thresholds = [0.01, 0.05, 0.1]  # PCK thresholds
+    test_mode = False  # Test mode
+    test_sampling = 0.05
 
-# Load the workout data
-keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
-num_classes = len(set(classes_array))
+    # Load the workout data
+    keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
+    num_classes = len(set(classes_array))
 
-# Create dataloaders
-train_loader, val_loader, class_name_to_idx = create_dataloaders(images_array, bounding_boxes_array, keypoints_array, 
-                                                                 classes_array, batch_size=batch_size, resize_to=resize_to, 
-                                                                 transforms=None, heatmap_size=resize_to,
-                                                                 sigma=sigma, apply_flip=apply_flip)
+    # Create dataloaders
+    train_loader, val_loader, class_name_to_idx = create_dataloaders(
+        images_array, bounding_boxes_array, keypoints_array,
+        classes_array, batch_size=batch_size, resize_to=resize_to,
+        transforms=None, heatmap_size=resize_to,
+        sigma=sigma, apply_flip=apply_flip
+    )
 
-# Limit the training data to 1%. Test any arquitecture across the whole enviroment
-if test_mode:
-    train_loader = torch.utils.data.Subset(train_loader.dataset, range(int(len(train_loader.dataset) * test_sampling)))
-    train_loader = torch.utils.data.DataLoader(train_loader, batch_size=batch_size, shuffle=True)  # Re-create DataLoader for the subset
-    val_loader = torch.utils.data.Subset(val_loader.dataset, range(int(len(val_loader.dataset) * test_sampling)))
-    val_loader = torch.utils.data.DataLoader(val_loader, batch_size=batch_size, shuffle=False)  # Re-create DataLoader for the subset
+    # Limit the training data to 1%. Test any architecture across the whole environment
+    if test_mode:
+        train_loader = torch.utils.data.Subset(train_loader.dataset, range(int(len(train_loader.dataset) * test_sampling)))
+        train_loader = torch.utils.data.DataLoader(train_loader, batch_size=batch_size, shuffle=True)
+        
+        val_loader = torch.utils.data.Subset(val_loader.dataset, range(int(len(val_loader.dataset) * test_sampling)))
+        val_loader = torch.utils.data.DataLoader(val_loader, batch_size=batch_size, shuffle=False)
 
-# Initialize model
-backbone_type = 'resnet50'
-model_tag = f'{backbone_type}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
-model = heatmap_fpn(num_classes=num_classes, num_keypoints=num_keypoints, backbone=backbone_type)
+    # Initialize model
+    backbone_type = 'resnet50'
+    model_tag = f'{backbone_type}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+    model = heatmap_fpn(num_classes=num_classes, num_keypoints=num_keypoints, backbone=backbone_type)
 
-# Specify the path to save the model
-model_save_path = f'./{model_tag}.pth' 
+    # Specify the path to save the model
+    model_save_path = f'./{model_tag}.pth' 
 
-# Train the model
-train_model(train_loader, model, class_name_to_idx, num_epochs=num_epochs, val_loader=val_loader, model_tag=model_tag, 
-            autocast_enabled=autocast_enabled, loss_weights=loss_weights, resize_to=resize_to, lr=lr, pck_thresholds=pck_thresholds)
+    # Train the model
+    train_model(
+        train_loader=train_loader,
+        model=model,
+        class_name_to_idx=class_name_to_idx,
+        num_epochs=num_epochs,
+        val_loader=val_loader,
+        model_tag=model_tag,
+        autocast_enabled=autocast_enabled,
+        loss_weights=loss_weights,
+        resize_to=resize_to,
+        lr=lr,
+        pck_thresholds=pck_thresholds
+    )
 
-# Save the trained model
-torch.save(model.state_dict(), model_save_path)
+    # Save the trained model
+    torch.save(model.state_dict(), model_save_path)
+
+if __name__ == '__main__':
+    import torch.multiprocessing as mp
+    mp.freeze_support()
+    main()

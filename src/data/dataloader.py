@@ -28,7 +28,7 @@ def create_dataloaders(image_paths,
                                  sigma=sigma, apply_flip=apply_flip)
 
     # Create the DataLoader instances for both datasets
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True, persistent_workers=True, prefetch_factor=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True, persistent_workers=True, prefetch_factor=4)
     
     return train_loader, val_loader, train_dataset.class_name_to_idx
