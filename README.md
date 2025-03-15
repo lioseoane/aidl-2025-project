@@ -208,29 +208,38 @@ We conducted a controlled experiment over **15 epochs** to evaluate the improvem
 The **only difference** between the models lies in their architectures.
 
 Since the regression losses and heatmap-based losses for bounding boxes and keypoints **are not directly comparable** (i.e., comparing a 17x352x352 heatmap target versus 17x3 regression outputs), we focus on **accuracy-based metrics** for the comparison.
+
+In the following table, it is demonstrated that the `fpn_v3` architecture significantly outperforms the previous models in predicting both Keypoints and Bounding Boxes (BBox).
+
+| Model               | Keypoint MPJPE & PCK@0.01 (%)   | BBox IoU |
+|---------------------|---------------------------------|----------|
+| baseline            | 15.90  &  2.13%                 | 0.36     |
+| baseline_heatmap    | 11.59  &  29.2%                 | 0.32     |
+| fpn_v3              | 8.798  &  42.3%                 | 0.85     |
+
+##### Details
+
 **BBox**
+
 After 15 epochs, the IoU (Intersection over Union) score for the `fpn_v3` model exceeds **0.85**, while the baseline and baseline_heatmap models remain around **0.35**.
 This significant improvement comes from replacing the fully connected (FC) head with a heatmap-based head.
 ![image info](resources/models_comparison/bbox_iou_val.png)
+
 **Classification**
+
 The classification head remains identical across all architectures. As a result, there is no significant difference in classification metrics between models.
 ![image info](resources/models_comparison/classification_accuracy_val.png)
 ![image info](resources/models_comparison/classification_precision_val.png)
 ![image info](resources/models_comparison/classification_recall_val.png)
+
 **Keypoints**
+
 The **Mean Per Joint Position Error (MPJPE)** is substantially lower in the `fpn_v3` model compared to both the `baseline_heatmap` and the `baseline`. Additionally, the **PCK@0.01** (Percentage of Correct Keypoints) metric shows clear improvements for the `fpn_v3` model.
 
 The transition from regression-based outputs to heatmap-based outputs significantly improves performance. Furthermore, integrating the Feature Pyramid Network (FPN) boosts overall accuracy in keypoint estimation.
 ![image info](resources/models_comparison/keypoint_mpjpe_val.png)
 ![image info](resources/models_comparison/keypoint_pck_010_val.png)
 ![image info](resources/models_comparison/keypoint_pck_001_val.png)
-
-| Model               | Keypoint MPJPE & PCK@0.01 (%)   | BBox IoU |
-|---------------------|---------------------------------|----------|
-| Baseline FC         | 15.90  &  2.13%                 | 0.36     |
-| Baseline Heatmap    | 11.59  &  29.2%                 | 0.32     |
-| Heatmap FPN v3      | 8.798  &  42.3%                 | 0.85     |
-
 
 - Final training (200 epochs)
     - Losses
