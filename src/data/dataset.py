@@ -1,9 +1,11 @@
-from torch.utils.data import Dataset
 import cv2
 import torch
 import numpy as np
-from src.utils.heatmaps import generate_heatmaps, generate_bbox_heatmaps
 import random
+
+from torch.utils.data import Dataset
+
+from src.utils.heatmaps import generate_heatmaps, generate_bbox_heatmaps
 
 # Define the pairs of keypoints to flip
 FLIP_PAIRS = [

@@ -1,13 +1,15 @@
+import os
+import numpy as np
+import matplotlib.cm as cm
+from tqdm import tqdm
+
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
+from torch.amp import autocast
+
 from src.utils.visualization import visualize_keypoints
 from src.utils.metrics import calculate_classification_accuracy, calculate_bbox_accuracy, calculate_keypoint_accuracy
-from torch.amp import autocast
-import os
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
-import matplotlib.cm as cm
-import numpy as np
 
 def evaluate_model(val_loader, model, class_name_to_idx, model_tag='0', log_dir="logs/", num_epoch=0, autocast_enabled=True, 
                    loss_weights=[1, 1, 1], resize_to=[224, 224], pck_thresholds=[0.01, 0.05, 0.1]):
