@@ -4,6 +4,7 @@ from datetime import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import torch
+import torch.multiprocessing as mp
 
 from src.data.dataloader import create_dataloaders
 from src.data.load_workout_data import load_workout_data
@@ -12,18 +13,34 @@ from src.training.train import train_model
 
 def main():
     # Set the hyperparameters
+    
+    # === Image Processing ===
     resize_to = [352, 352]  # Resize the input image to this size
+    # Valid resize options: [224x224], [256x256], [288x288], [320x320], [352x352]
+    # Most source images have a width of ~360px.
+
+    # === Training Parameters ===
     batch_size = 24  # Batch size
-    sigma = 2  # Sigma for the gaussian kernel
-    apply_flip = True  # Apply flip augmentation
     num_epochs = 250  # Number of epochs
-    loss_weights = [0.003, 0.9, 0.097]  # Classification, keypoint loss and bounding box weights respectively
-    autocast_enabled = True  # Enable automatic mixed precision
-    num_keypoints = 17  # Number of keypoints
     lr = [1e-4, 1e-3, 2e-4, 1e-3]  # Learning rate [fpn, workout class, keypoints, bbox]
-    pck_thresholds = [0.01, 0.05, 0.1]  # PCK thresholds
-    test_mode = False  # Test mode
-    test_sampling = 0.05
+
+    # === Augmentation ===
+    sigma = 2  # Sigma for the gaussian kernel of the keypoints
+    apply_flip = True  # Apply horizontal flip augmentation
+
+    # === Loss Balancing ===
+    loss_weights = [0.003, 0.9, 0.097]  # Classification, keypoint loss and bounding box weights respectively
+    
+    # === Mixed Precision ===
+    autocast_enabled = True  # Enable automatic mixed precision
+
+    # === Task-Specific ===
+    num_keypoints = 17  # Number of keypoints
+    pck_thresholds = [0.01, 0.05, 0.1]  # PCK thresholds (for evaluation metrics)
+
+    # === Testing ===
+    test_mode = False  # Test arquitecture mode
+    test_sampling = 0.05 # Fraction of the data to sample (if test_mode is enabled)
 
     # Load the workout data
     keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
@@ -72,6 +89,5 @@ def main():
     torch.save(model.state_dict(), model_save_path)
 
 if __name__ == '__main__':
-    import torch.multiprocessing as mp
     mp.freeze_support()
     main()

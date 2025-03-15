@@ -21,84 +21,42 @@ class heatmap_fpn(nn.Module):
         self.fpn = FPNBlock(in_channels=[256, 512, 1024, 2048], hidden_dim=hidden_dim)
 
         # Bounding box head
-        #self.bbox_head = nn.Sequential(
-            #nn.ConvTranspose2d(self.input_size, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(256),
-            #nn.ReLU(inplace=True),
-
-            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(256),
-            #nn.ReLU(inplace=True),
-
-            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(256),
-            #nn.ReLU(inplace=True),
-
-            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(256),
-            #nn.ReLU(inplace=True),
-
-            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(256),
-            #nn.ReLU(inplace=True),
-
-            #nn.Conv2d(256, 1, kernel_size=1),
-        #)
         self.bbox_head = nn.Sequential(
-            # 7x7 → 14x14
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(self.input_size, hidden_dim, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True),
 
-            # 14x14 → 28x28
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(hidden_dim, hidden_dim // 2, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim // 2),
             nn.ReLU(inplace=True),
 
-            # 28x28 → 56x56
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(hidden_dim // 2, hidden_dim // 4, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim // 4),
             nn.ReLU(inplace=True),
 
-            # 56x56 → 112x112
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(hidden_dim // 4, hidden_dim // 8, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim // 8),
             nn.ReLU(inplace=True),
 
-            # 112x112 → 224x224
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(hidden_dim // 8, hidden_dim // 16, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim // 16),
             nn.ReLU(inplace=True),
 
-            # Final 1x1 conv to output 1 channel heatmap
             nn.Conv2d(hidden_dim // 16, 1, kernel_size=1)
         )
 
         # Keypoints head
-        #self.keypoints_head = nn.Sequential(
-            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(256),
-            #nn.ReLU(inplace=True),
-
-            #nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(256),
-            #nn.ReLU(inplace=True),
-
-            #nn.Conv2d(256, num_keypoints, kernel_size=1),
-        #)
         self.keypoints_head = nn.Sequential(
-            # 56x56 → 112x112
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True),
 
-            # 112x112 → 224x224
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(hidden_dim, num_keypoints, kernel_size=1)
         )
