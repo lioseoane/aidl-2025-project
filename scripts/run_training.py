@@ -5,6 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import torch
 import torch.multiprocessing as mp
+from torchvision import transforms
 
 from src.data.dataloader import create_dataloaders
 from src.data.load_workout_data import load_workout_data
@@ -45,12 +46,27 @@ def main():
     # Load the workout data
     keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
     num_classes = len(set(classes_array))
+    
+    # Apply data augmentation
+    train_transforms = transforms.Compose([
+        transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),                 
+        transforms.RandomGrayscale(p=0.1),     
+        transforms.ToTensor(),      
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
+
+    val_transforms = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
 
     # Create dataloaders
     train_loader, val_loader, class_name_to_idx = create_dataloaders(
         images_array, bounding_boxes_array, keypoints_array,
         classes_array, batch_size=batch_size, resize_to=resize_to,
-        transforms=None, heatmap_size=resize_to,
+        transforms=[train_transforms, val_transforms], heatmap_size=resize_to,
         sigma=sigma, apply_flip=apply_flip
     )
 

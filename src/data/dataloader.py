@@ -10,7 +10,7 @@ def create_dataloaders(image_paths,
                        resize_to=[224, 224], 
                        val_size=0.2, 
                        random_seed=42, 
-                       transforms=None,
+                       transforms=[None, None],
                        heatmap_size=[224, 224],
                        sigma = 2,
                        apply_flip = True):
@@ -22,9 +22,9 @@ def create_dataloaders(image_paths,
 
     # Initialize the datasets for both training and validation sets
     train_dataset = WorkoutDataset(train_image_paths, train_bounding_boxes, train_keypoints, train_class_names, resize_to=resize_to, 
-                                   transform=transforms, heatmap_size=heatmap_size, sigma=sigma, apply_flip=apply_flip)
+                                   transform=transforms[0], heatmap_size=heatmap_size, sigma=sigma, apply_flip=apply_flip)
     val_dataset = WorkoutDataset(val_image_paths, val_bounding_boxes, val_keypoints, val_class_names, resize_to=resize_to, 
-                                 transform=transforms, class_name_to_idx=train_dataset.class_name_to_idx, heatmap_size=heatmap_size, 
+                                 transform=transforms[1], class_name_to_idx=train_dataset.class_name_to_idx, heatmap_size=heatmap_size, 
                                  sigma=sigma, apply_flip=apply_flip)
 
     # Create the DataLoader instances for both datasets

@@ -11,11 +11,23 @@ import torch
 from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
+def denormalize_image(img_tensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
+    """
+    img_tensor: Tensor (C x H x W) normalized image
+    returns: NumPy array (H x W x C) in [0, 1]
+    """
+    img = img_tensor.clone().cpu().detach().numpy()
+    img = np.transpose(img, (1, 2, 0))
+    img = img * std + mean
+    img = np.clip(img, 0, 1)
+    return img
+
+
 # Initialize model and load checkpoint
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_15.pth' # Model checkpoint
+checkpoint_path = 'checkpoints/model_epoch_2.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
@@ -43,6 +55,9 @@ preprocessed_image = cv2.copyMakeBorder(
 )
 
 preprocessed_image_tensor = torch.tensor(preprocessed_image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize
+mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+preprocessed_image_tensor = (preprocessed_image_tensor - mean) / std
 preprocessed_image_tensor = preprocessed_image_tensor.unsqueeze(0).to(device)
 
 # Unnormalize for visualization
@@ -59,6 +74,8 @@ keypoints_pred = extract_keypoints_with_confidence(heatmap_pred)
 workout_label_pred = output[2] 
 
 bbox_heatmap_final = bbox_heatmap_pred.squeeze(0).cpu().detach().numpy()
+
+image_preprocessed = denormalize_image(preprocessed_image_tensor[0])
 
 # Sum the heatmap over the keypoint channels to get a single [H, W] array
 summed_heatmap = np.sum(heatmap_pred.cpu().detach().numpy(), axis=(0, 1))
@@ -98,7 +115,7 @@ for pair in SKELETON:
                      (int(x2 * target_w), int(y2 * target_h)), (0, 0, 255), 1)  # Blue lines
 
 
-with open('resnet50_2025-03-15_14-02-20.json', 'r') as f:
+with open('resnet50_2025-03-15_19-00-46.json', 'r') as f:
     idx_to_class_name = json.load(f)
 
 # Display workout class and probability
