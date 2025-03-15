@@ -217,22 +217,22 @@ In the following table, it is demonstrated that the `fpn_v3` architecture signif
 | baseline_heatmap    | 11.59  &  29.2%                 | 0.32     |
 | fpn_v3              | 8.798  &  42.3%                 | 0.85     |
 
-##### Details
+**Details**
 
-**BBox**
+##### BBox Head
 
 After 15 epochs, the IoU (Intersection over Union) score for the `fpn_v3` model exceeds **0.85**, while the baseline and baseline_heatmap models remain around **0.35**.
 This significant improvement comes from replacing the fully connected (FC) head with a heatmap-based head.
 ![image info](resources/models_comparison/bbox_iou_val.png)
 
-**Classification**
+##### Classification Head
 
 The classification head remains identical across all architectures. As a result, there is no significant difference in classification metrics between models.
 ![image info](resources/models_comparison/classification_accuracy_val.png)
 ![image info](resources/models_comparison/classification_precision_val.png)
 ![image info](resources/models_comparison/classification_recall_val.png)
 
-**Keypoints**
+##### Keypoints Head
 
 The **Mean Per Joint Position Error (MPJPE)** is substantially lower in the `fpn_v3` model compared to both the `baseline_heatmap` and the `baseline`. Additionally, the **PCK@0.01** (Percentage of Correct Keypoints) metric shows clear improvements for the `fpn_v3` model.
 
