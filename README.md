@@ -201,15 +201,36 @@ We evaluated our model across three tasks using the following metrics:
   - False positives and false negatives per session.
 
 ## Results
-- Small experiment comparing architectures (10 epochs)
-    - Comparison in losses
-    - Accuracy
-    | Model               | Keypoint MPJPE & PCK@0.01 (%) | BBox IoU (%) | Workout Class. Precision & Recall (%) |
-    |---------------------|-------------------------------|--------------|---------------------------------------|
-    | Baseline FC         | XX.X  &  XX.X                 | XX.X         | XX.X  &  XX.X                         |
-    | Baseline Heatmap    | XX.X  &  XX.X                 | XX.X         | XX.X  &  XX.X                         |
-    | Heatmap FPN v3      | XX.X  &  XX.X                 | XX.X         | XX.X  &  XX.X                         |
-    - Images from test
+
+#### Experiment comparing the different architectures
+We conducted a controlled experiment over **15 epochs** to evaluate the improvements introduced by different model architectures. The same **dataset**, **hyperparameters**, and **data augmentation transformations** were applied across all experiments to ensure fairness and consistency.
+
+The **only difference** between the models lies in their architectures.
+
+Since the regression losses and heatmap-based losses for bounding boxes and keypoints **are not directly comparable** (i.e., comparing a 17x352x352 heatmap target versus 17x3 regression outputs), we focus on **accuracy-based metrics** for the comparison.
+**BBox**
+After 15 epochs, the IoU (Intersection over Union) score for the `fpn_v3` model exceeds **0.85**, while the baseline and baseline_heatmap models remain around **0.35**.
+This significant improvement comes from replacing the fully connected (FC) head with a heatmap-based head.
+![image info](resources/models_comparison/bbox_iou_val.png)
+**Classification**
+The classification head remains identical across all architectures. As a result, there is no significant difference in classification metrics between models.
+![image info](resources/models_comparison/classification_accuracy_val.png)
+![image info](resources/models_comparison/classification_precision_val.png)
+![image info](resources/models_comparison/classification_recall_val.png)
+**Keypoints**
+The **Mean Per Joint Position Error (MPJPE)** is substantially lower in the `fpn_v3` model compared to both the `baseline_heatmap` and the `baseline`. Additionally, the **PCK@0.01** (Percentage of Correct Keypoints) metric shows clear improvements for the `fpn_v3` model.
+
+The transition from regression-based outputs to heatmap-based outputs significantly improves performance. Furthermore, integrating the Feature Pyramid Network (FPN) boosts overall accuracy in keypoint estimation.
+![image info](resources/models_comparison/keypoint_mpjpe_val.png)
+![image info](resources/models_comparison/keypoint_pck_010_val.png)
+![image info](resources/models_comparison/keypoint_pck_001_val.png)
+
+| Model               | Keypoint MPJPE & PCK@0.01 (%)   | BBox IoU |
+|---------------------|---------------------------------|----------|
+| Baseline FC         | 15.90  &  2.13%                 | 0.36     |
+| Baseline Heatmap    | 11.59  &  29.2%                 | 0.32     |
+| Heatmap FPN v3      | 8.798  &  42.3%                 | 0.85     |
+
 
 - Final training (200 epochs)
     - Losses
