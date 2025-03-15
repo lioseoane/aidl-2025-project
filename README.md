@@ -116,6 +116,20 @@ These classes were excluded due to their high similarity to the standard `bench 
 
 As a result of these modifications—pseudo-labeling, dataset augmentation, and class removal—the final dataset differs significantly from the original Kaggle version.
 
+#### Dataset Loading and Preprocessing
+
+The dataset loading and preprocessing pipeline is implemented in the `src/data/` module, primarily across three key files: `load_workout_data.py`, `dataloader.py`, and `dataset.py`.
+
+The process begins with `load_workout_data.py`, which loads the complete dataset, including workout images, keypoints, bounding box annotations, and workout labels. This script is responsible for reading the raw data and preparing it for further processing but does not handle any data splitting.
+
+The dataset splitting logic is managed by `dataloader.py`. Here, the data is divided into **training** and **evaluation** sets, following an **80/20** split. The evaluation set is used during training to monitor model performance. `dataloader.py` also sets up the PyTorch `DataLoader` instances, enabling efficient batching, shuffling, and data augmentation during training and evaluation.
+
+The core dataset handling is implemented in `dataset.py`, which defines the `WorkoutDataset` class. This class loads individual samples (images and corresponding annotations), applies data augmentation techniques (such as horizontal flipping or scaling), and performs normalization. It also generates the target outputs required by the model.
+
+For keypoints and bounding boxes, `dataset.py` creates ground-truth heatmaps. Each keypoint is represented by a 2D Gaussian heatmap centered at its location, while bounding boxes are encoded similarly through their center points. The logic for constructing these Gaussian heatmaps resides in `utils/heatmaps.py`, which provides utility functions used by the dataset class.
+
+This data pipeline ensures that both the input images and their corresponding labels (heatmaps for keypoints and bounding boxes, and workout class labels) are properly prepared for training and inference.
+
 ## Models
 During the project, we trained several models to improve keypoint regression performance. Our approach evolved over time, starting with a **baseline** model and progressing through more sophisticated architectures aimed at better capturing spatial and multi-scale information.
 
@@ -157,18 +171,31 @@ The Workout Label Head predicts the workout type from the global features of the
 This head enables the model to classify the workout in parallel with keypoint and bounding box predictions.
 
 ## Exercise Counter
+- Info about the exercise counter
+
+## Training
+- Info about the training:
+    - LR rate
+    - Backbone freezing and workout freezing
+    - Loss weight
+    - Losses
+    - Framework
+
+
 
 ## Results
-
-
+- Small experiment comparing arquitectures (10 epochs)
+- Final training (200 epochs)
+- Inference:
 
 ## Conclusions
 
 #### Proposals for Improvements
 - **Integrate Self-Attention Mechanisms (Transformers)**
 Recent research, such as ViTPose [[5]](#5), demonstrates that self-attention significantly improves keypoint detection accuracy by capturing long-range dependencies and global context. Incorporating transformer-based architectures or adding self-attention layers to the existing model could enhance both precision and robustness in keypoint localization.
-Unfortunately, due to time constraints, we have not yet explored this architecture in our current work. Future iterations could investigate transformer-based models or hybrid CNN-transformer approaches to further improve performance.
-
+Unfortunately, due to time constraints, we have not yet explored this architecture in our current work.
+-  **Introduce Automated Hyperparameter Tuning with Proper Validation Splits** 
+In the current implementation, hyperparameters—such as learning rate, loss weights, and augmentation settings—were manually selected through trial and error, often requiring extensive post-training analysis and adjustments. There is an opportunity to streamline this process by implementing a **proper validation pipeline** and leveraging **automated hyperparameter tuning** tools (e.g., Optuna, Ray Tune). A more systematic approach to tuning would reduce manual intervention, improve reproducibility, and potentially lead to better model performance.  
 
 ## Demo
 

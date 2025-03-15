@@ -15,7 +15,7 @@ from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_f
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_78.pth' # Model checkpoint
+checkpoint_path = 'checkpoints/model_epoch_15.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
@@ -25,7 +25,7 @@ image = cv2.imread('test.jpg')
 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
 h, w, _ = image.shape
-target_w, target_h = [224, 224]
+target_w, target_h = [352, 352]
 
 scale = min(target_w / float(w), target_h / float(h))
 new_w, new_h = int(w * scale), int(h * scale)
@@ -98,7 +98,7 @@ for pair in SKELETON:
                      (int(x2 * target_w), int(y2 * target_h)), (0, 0, 255), 1)  # Blue lines
 
 
-with open('resnet50_2025-03-13_22-01-38.json', 'r') as f:
+with open('resnet50_2025-03-15_14-02-20.json', 'r') as f:
     idx_to_class_name = json.load(f)
 
 # Display workout class and probability
