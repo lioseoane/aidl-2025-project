@@ -25,10 +25,6 @@ def main():
     num_epochs = 250  # Number of epochs
     lr = [1e-4, 1e-3, 2e-4, 1e-3]  # Learning rate [fpn, workout class, keypoints, bbox]
 
-    # === Augmentation ===
-    sigma = 2  # Sigma for the gaussian kernel of the keypoints
-    apply_flip = True  # Apply horizontal flip augmentation
-
     # === Loss Balancing ===
     loss_weights = [0.003, 0.9, 0.097]  # Classification, keypoint loss and bounding box weights respectively
     
@@ -47,9 +43,31 @@ def main():
     keypoints_array, images_array, bounding_boxes_array, classes_array = load_workout_data()
     num_classes = len(set(classes_array))
     
-    # Apply data augmentation
+    # === Augmentation ===
+    sigmas = [
+        1.2,  # Nose
+        1.2,  # Left Eye
+        1.2,  # Right Eye
+        1.2,  # Left Ear
+        1.2,  # Right Ear
+        2.4,  # Left Shoulder
+        2.4,  # Right Shoulder
+        2.2,  # Left Elbow
+        2.2,  # Right Elbow
+        2.2,  # Left Wrist
+        2.2,  # Right Wrist
+        2.4,  # Left Hip
+        2.4,  # Right Hip
+        2.2,  # Left Knee
+        2.2,  # Right Knee
+        2.2,  # Left Ankle
+        2.2   # Right Ankle
+    ]
+
+    apply_flip = True  # Apply horizontal flip augmentation
+
     train_transforms = transforms.Compose([
-        transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),                 
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),                 
         transforms.RandomGrayscale(p=0.1),     
         transforms.ToTensor(),      
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -67,7 +85,7 @@ def main():
         images_array, bounding_boxes_array, keypoints_array,
         classes_array, batch_size=batch_size, resize_to=resize_to,
         transforms=[train_transforms, val_transforms], heatmap_size=resize_to,
-        sigma=sigma, apply_flip=apply_flip
+        sigmas=sigmas, apply_flip=apply_flip
     )
 
     # Limit the training data to 1%. Test any architecture across the whole environment

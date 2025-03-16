@@ -27,7 +27,7 @@ def denormalize_image(img_tensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224,
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_2.pth' # Model checkpoint
+checkpoint_path = 'checkpoints/model_epoch_50.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
