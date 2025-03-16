@@ -17,6 +17,10 @@ class heatmap_fpn(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = False
 
+        # Unfreeze the layer4 of the backbone
+        for param in self.backbone.layer4.parameters():
+            param.requires_grad = True
+
         # Feature Pyramid Lateral Connections
         self.fpn = FPNBlock(in_channels=[256, 512, 1024, 2048], hidden_dim=hidden_dim)
 
