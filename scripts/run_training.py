@@ -26,7 +26,7 @@ def main():
     lr = [1e-4, 1e-3, 2e-4, 1e-3]  # Learning rate [fpn, workout class, keypoints, bbox]
 
     # === Loss Balancing ===
-    loss_weights = [0.003, 0.9, 0.097]  # Classification, keypoint loss and bounding box weights respectively
+    loss_weights = [0.002, 0.95, 0.055]  # Classification, keypoint loss and bounding box weights respectively
     
     # === Mixed Precision ===
     autocast_enabled = True  # Enable automatic mixed precision

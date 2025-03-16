@@ -24,6 +24,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
 
     # Optimizer
     optimizer = optim.Adam([
+        {'params': model.backbone.layer4.parameters(), 'lr': lr[0]}, 
         {'params': model.fpn.parameters(), 'lr': lr[0]}, 
         {'params': model.workout_label_head.parameters(), 'lr': lr[1]},  
         {'params': model.keypoints_head.parameters(), 'lr':lr[2]},
@@ -65,7 +66,7 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
     for epoch in range(num_epochs):
 
         # Freeze workout parameters after 10 epochs
-        if epoch == 10:
+        if epoch == 8:
             for param in model.workout_label_head.parameters():
                 param.requires_grad = False
 
