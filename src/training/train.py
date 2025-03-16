@@ -64,8 +64,8 @@ def train_model(train_loader, model, class_name_to_idx, num_epochs=10, log_dir="
     # Training loop
     for epoch in range(num_epochs):
 
-        # Freeze workout parameters after 8 epochs
-        if epoch == 8:
+        # Freeze workout parameters after 10 epochs
+        if epoch == 10:
             for param in model.workout_label_head.parameters():
                 param.requires_grad = False
 

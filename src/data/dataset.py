@@ -30,7 +30,7 @@ class WorkoutDataset(Dataset):
                  transform=None, 
                  class_name_to_idx=None, 
                  heatmap_size=[224, 224],
-                 sigma = 2,
+                 sigmas = None,
                  apply_flip=True):
         
         self.image_paths = image_paths
@@ -39,7 +39,7 @@ class WorkoutDataset(Dataset):
         self.class_names = class_names
         self.resize_to = resize_to
         self.heatmap_size = heatmap_size
-        self.sigma = sigma
+        self.sigmas = sigmas
         self.apply_flip = apply_flip
         self.transform = transform
 
@@ -155,7 +155,7 @@ class WorkoutDataset(Dataset):
         # Convert targets to tensors
         bbox_tensor = generate_bbox_heatmaps(bbox, heatmap_size=tuple(self.heatmap_size))
         # keypoints_tensor = torch.tensor(keypoints_fixed, dtype=torch.float32) # Normalized based keypoints [0, 1]
-        heatmaps_tensor = generate_heatmaps(keypoints_fixed, output_size=tuple(self.heatmap_size), sigma=self.sigma)
+        heatmaps_tensor = generate_heatmaps(keypoints_fixed, output_size=tuple(self.heatmap_size), sigmas=self.sigmas)
         confidences_tensor = torch.tensor(keypoints_conf[:, None], dtype=torch.float32) 
 
         # Create one-hot encoded tensor for the class label

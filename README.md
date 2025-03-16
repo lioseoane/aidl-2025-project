@@ -202,7 +202,7 @@ We evaluated our model across three tasks using the following metrics:
 
 ## Results
 
-#### Experiment comparing the different architectures
+### Experiment comparing the different architectures
 We conducted a controlled experiment over **15 epochs** to evaluate the improvements introduced by different model architectures. The same **dataset**, **hyperparameters**, and **data augmentation transformations** were applied across all experiments to ensure fairness and consistency.
 
 The **only difference** between the models lies in their architectures.
@@ -211,11 +211,11 @@ Since the regression losses and heatmap-based losses for bounding boxes and keyp
 
 In the following table, it is demonstrated that the `fpn_v3` architecture significantly outperforms the previous models in predicting both Keypoints and Bounding Boxes (BBox).
 
-| Model               | Keypoint MPJPE & PCK@0.01 (%)   | BBox IoU |
-|---------------------|---------------------------------|----------|
-| baseline            | 15.90  &  2.13%                 | 0.36     |
-| baseline_heatmap    | 11.59  &  29.2%                 | 0.32     |
-| fpn_v3              | 8.798  &  42.3%                 | 0.85     |
+| Model               | Keypoint MPJPE & PCK@0.01 (%)   | BBox IoU@0.85 |
+|---------------------|---------------------------------|---------------|
+| baseline            | 15.90  &  2.13%                 | 0.36          |
+| baseline_heatmap    | 11.59  &  29.2%                 | 0.32          |
+| fpn_v3              | 8.798  &  42.3%                 | 0.85          |
 
 **Details**
 

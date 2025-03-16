@@ -1,8 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def generate_heatmaps(keypoints, output_size=(224, 224), sigma=1):
-
+def generate_heatmaps(keypoints, output_size=(224, 224), sigmas=None):
     num_keypoints = keypoints.shape[0]
     height, width = output_size
 
@@ -13,6 +12,9 @@ def generate_heatmaps(keypoints, output_size=(224, 224), sigma=1):
     # Initialize heatmaps
     heatmaps = torch.zeros((num_keypoints, height, width), dtype=torch.float)
 
+    if sigmas is None:
+        sigmas = [2.0 for _ in range(num_keypoints)]  # fallback sigma if none provided
+
     for i in range(num_keypoints):
         x_norm, y_norm, conf = keypoints[i]
 
@@ -20,6 +22,9 @@ def generate_heatmaps(keypoints, output_size=(224, 224), sigma=1):
             # Convert normalized coordinates to pixel coordinates
             x = x_norm * (width - 1)
             y = y_norm * (height - 1)
+
+            # Fetch sigma for this keypoint
+            sigma = sigmas[i]
 
             # Compute Gaussian heatmap
             heatmap = torch.exp(-((x_range - x) ** 2 + (y_range - y) ** 2) / (2 * sigma ** 2))

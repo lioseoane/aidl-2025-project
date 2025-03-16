@@ -47,7 +47,7 @@ class KalmanFilterKeypoint:
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-state_dict = torch.load('checkpoints/model_epoch_10.pth', map_location=device, weights_only=True)
+state_dict = torch.load('checkpoints/model_epoch_20.pth', map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
