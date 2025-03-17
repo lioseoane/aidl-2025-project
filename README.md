@@ -104,6 +104,16 @@ The folder in [MEGA](https://mega.nz/folder/cIJEFITB#LCAwIp3KXHMGSwKg847oPw) als
 ## Dataset
 Our dataset is primarily based on the [Workout Exercises Kaggle Dataset](https://www.kaggle.com/datasets/hasyimabdillah/workoutexercises-images/data), which provides workout images along with exercise class labels. However, the original dataset lacks keypoint and bounding box annotations, which are crucial for our task.
 
+### Examples:
+
+**bench press** class
+
+![image info](resources/dataset/bench_press.jpg)
+
+**squat** class
+
+![image info](resources/dataset/squat.jpg)
+
 ### Keypoint and Bounding Box Annotations
 To generate keypoint and bounding box (bbox) labels, we used pseudo ground truth annotations predicted by the `YOLOv11x` model [[4]](#4). After multiple trials, we found it necessary to apply a data cleaning step before generating annotations. Specifically, we removed or masked additional people present in the background to focus solely on the person performing the workout. You can hide the person by using the following script: `generate_images_with_hidden_person.py`
 You can reproduce the annotation generation process using the `generate_keypoints_confidence.py` script located in the `scripts` folder. This script runs the  `YOLO` model over the dataset and outputs keypoints and bounding box annotations with confidence scores.
@@ -153,6 +163,7 @@ We iterated through several versions of this model:
 
 ### heatmap_fpn_v3 Architecture
 ![image info](resources/heatmap_fpn_v3.jpg)
+
 #### Backbone and Feature Extraction:
 The architecture begins with a pretrained ResNet-50 backbone[[7]](#7), using feature maps up to and including the `layer4` block. These multi-scale feature maps serve as the input for subsequent processing. The backbone parameters are frozen excepts the parameters from the `layer4` block.
 
@@ -265,7 +276,8 @@ The training process utilizes `TensorBoard` to visualize and track these metrics
 
 ## Results
 
-### Experiment comparing the different architectures
+### Experiment 1 - Comparing Different Architectures
+
 We conducted a controlled experiment over **15 epochs** to evaluate the improvements introduced by different model architectures. The same **dataset**, **hyperparameters**, and **data augmentation transformations** were applied across all experiments to ensure fairness and consistency.
 
 The **only difference** between the models lies in their architectures.
@@ -299,14 +311,14 @@ The transition from regression-based outputs to heatmap-based outputs significan
 ![image info](resources/models_comparison/keypoint_pck_010_val.png)
 ![image info](resources/models_comparison/keypoint_pck_001_val.png)
 
-### Experiment comparing frozen versus unfrozen backbone
-Another experiment we conducted involved unfreezing the `layer4` block of the `ResNet50` backbone. This mechanism significantly improved the overall accuracy of the model.
+### Experiment 2 - Frozen vs Unfrozen Backbone (Fine-tuning Layer4)
+
+The second experiment focused on unfreezing the `layer4` block of the `ResNet50` backbone, resulting in notable improvements in the model’s accuracy.
 
 | Model               | Keypoint MPJPE & PCK@0.01       | BBox IoU@0.8 |
 |---------------------|---------------------------------|--------------|
 | frozen backbone     | 10.1  &  0.61                   | 0.87         |
 | unfrozen backbone   | 4.60  &  0.80                   | 0.97         |
-
 
 #### Bounding Box Results
 We observed a substantial improvement in bounding box accuracy. The `IoU@0.8` increased from 0.87 to over 0.95 on the test set. Additionally, the head `Loss` decreased significantly, indicating better convergence and more precise predictions.
@@ -319,12 +331,50 @@ The keypoints head also demonstrated notable improvements. Both the `MPJPE` and 
 ![image info](resources/frozen_vs_unfrozen_backbone/keypoints_loss.jpg)
 ![image info](resources/frozen_vs_unfrozen_backbone/keypoints_pck_001.jpg)
 
-### Model Training
-    - Losses
-    - Accuracy
-    - Images from test
-    
-### Inferece
+### Full Training - Best Model Performance (fpn_v3 with Unfrozen Backbone)
+After conducting a series of controlled experiments to evaluate different architectures and fine-tuning strategies, the `heatmap_fpn_v3` model, with an **unfrozen** `layer4` **block** from the `ResNet50` backbone, was identified as the best-performing configuration.
+This section presents a comprehensive analysis of the training process and evaluation results obtained after **130 epochs** of full training using this architecture.
+
+#### Training and Validation Total Loss
+The **total loss** curve illustrates a consistent and steady decrease throughout the training process. During the initial 20 epochs, there is a sharp decline, indicating that the model rapidly learns the fundamental features for the tasks at hand. After this early phase, the model continues to improve gradually, with the total loss approaching convergence by the later epochs.
+The validation loss follows a similar trend, maintaining a stable gap relative to the training loss. This suggests that the model generalizes well to unseen data and there is no significant evidence of overfitting.
+
+![image info](resources/full_training/total_loss.png)
+
+#### Bounding Box Head
+The bounding box head demonstrates strong and consistent convergence throughout training. The **Bounding Box Los**s** decreases sharply within the first 20 epochs as the model quickly learns to localize objects within the images. Beyond this point, both the training and validation losses stabilize at low values. By the final epoch, the training loss reaches **0.0087**, while the validation loss settles at **0.0122**.
+The minimal difference between the training and validation losses indicates robust generalization and suggests the model is not overfitting to the training data.
+
+![image info](resources/full_training/bbox_loss.png)
+
+Further supporting these observations, the **Bounding Box IoU** Accuracy demonstrates a steady improvement across epochs. The **training IoU** reaches **0.975**, while the **validation IoU** stabilizes at **0.9337**. This performance reflects the model's ability to predict accurate and consistent bounding boxes across both training and validation datasets.
+
+![image info](resources/full_training/bbox_iou.png)
+
+#### Keypoints Head
+The keypoint detection head presents a more challenging optimization process, which is reflected in its learning curves. The **Keypoint Loss** for the training set decreases consistently over time, reaching **2.2963** by the end of training. However, the **validation loss** stabilizes at a higher value of **5.3778**, with greater fluctuation between epochs.
+This disparity between the training and validation losses suggests that keypoint detection is a more complex task, potentially due to greater variation in body poses, occlusions, or the presence of difficult samples in the validation set.
+
+![image info](resources/full_training/keypoints_loss.png)
+
+Despite these challenges, the model achieves a **Mean Per Joint Position Error (MPJPE)** of **3.5758** on the **validation set**, demonstrating its ability to accurately predict joint locations. The **PCK@0.01** metric further confirms the model's performance, with **77.31%** of keypoints predicted within 1% of the object's size. Additionally, the **Predicted Visibility Ratio**, which measures the model's ability to correctly identify whether keypoints are visible, stabilizes at **89.56%** in the **validation set**.
+These results indicate that, while the keypoint head is more sensitive to data complexity, it still achieves a strong level of accuracy in joint localization and visibility prediction.
+
+![image info](resources/full_training/keypoints_mpjpe.png)
+![image info](resources/full_training/keypoints_pck_001.png)
+![image info](resources/full_training/keypoints_predicted_ratio.png)
+
+#### Classification Head
+The classification head exhibits rapid and stable convergence. The **Classification Loss** decreases sharply within the first few epochs and remains low and stable throughout the remainder of the training process. By the final epoch, the **training** and **validation** losses reach **0.1535** and **0.1342**, respectively. The similarity between these values indicates that the model generalizes well across datasets, with no signs of overfitting.
+
+![image info](resources/full_training/classification_loss.png)
+
+This stable convergence is further supported by the **Classification Accuracy**, which consistently remains above **98.8%** in both **training** and **validation** datasets. Similarly, both **Precision** and **Recall** scores stay consistently high, each stabilizing above **98.7%**.
+These metrics confirm that the classification head is able to distinguish between different action classes with high precision and recall, ensuring reliable performance in action recognition tasks, even when evaluated on unseen data.
+
+![image info](resources/full_training/classification_accuracy.png)
+![image info](resources/full_training/classification_precision.png)
+![image info](resources/full_training/classification_recall.png)
 
 ## Conclusions
 
