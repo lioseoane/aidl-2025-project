@@ -47,7 +47,7 @@ class KalmanFilterKeypoint:
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-state_dict = torch.load('checkpoints/model_epoch_20.pth', map_location=device, weights_only=True)
+state_dict = torch.load('model_epoch_110.pth', map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -127,7 +127,7 @@ cv2.namedWindow('Live Prediction', cv2.WINDOW_NORMAL)
 cv2.resizeWindow('Live Prediction', size_x, size_y)
 
 # Load idx_to_class_name during inference
-with open('resnet50_2025-03-13_22-01-38.json', 'r') as f:
+with open('resnet50_2025-03-16_18-24-22.json', 'r') as f:
     idx_to_class_name = json.load(f)
 
 while cap.isOpened():

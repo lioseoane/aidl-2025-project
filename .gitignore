@@ -1,6 +1,10 @@
 # Images
 *.jpg
 
+# Ignore Resources
+!resources/
+!resources/**
+
 # Videos
 *.mp4
 

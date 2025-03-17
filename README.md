@@ -82,9 +82,10 @@ AIDL-2025-PROJECT/
 ```
 
 ## Project Configuration
+#### Training
 In order to train or run an inference of the model you will need to follow the next steps:
 1. Clone the repo to your local or cloud machine
-2. Download the dataset and extract it in the folder workout_dataset from the following link: [MEGA](https://mega.nz/file/cchi1C7T#6QIFmEqopbOWcxgIpwTLkXptHp70v-veDmQ7pw29FLc).
+2. Download the dataset and extract it in the folder workout_dataset from the following link: [MEGA](https://mega.nz/folder/cIJEFITB#LCAwIp3KXHMGSwKg847oPw).
     - The path structure should be `workout_dataset/new_images` and `workout_dataset/new_labels`
 3. Install the venv or conda enviroment and install the libraries
     - `pip install -r requirements.txt` 
@@ -96,10 +97,13 @@ In order to train or run an inference of the model you will need to follow the n
 **Optional:**
 In the `run_training.py` file you can modify some hyperparameters.
 
+#### Inference
+The folder in [MEGA](https://mega.nz/folder/cIJEFITB#LCAwIp3KXHMGSwKg847oPw) also contains pretrained checkpoints of the model in the folder `pretrained` that can by used for inference. You can use the scripts `run_inference.py` for a single image or try the `real_time_app.py` using the webcam.
+
 ## Dataset
 Our dataset is primarily based on the [Workout Exercises Kaggle Dataset](https://www.kaggle.com/datasets/hasyimabdillah/workoutexercises-images/data), which provides workout images along with exercise class labels. However, the original dataset lacks keypoint and bounding box annotations, which are crucial for our task.
 #### Keypoint and Bounding Box Annotations
-To generate keypoint and bounding box labels, we used pseudo ground truth annotations predicted by the `YOLOv11x` model [[4]](#4). After multiple trials, we found it necessary to apply a data cleaning step before generating annotations. Specifically, we removed or masked additional people present in the background to focus solely on the person performing the workout. `(MISSING SCRIPT)`
+To generate keypoint and bounding box labels, we used pseudo ground truth annotations predicted by the `YOLOv11x` model [[4]](#4). After multiple trials, we found it necessary to apply a data cleaning step before generating annotations. Specifically, we removed or masked additional people present in the background to focus solely on the person performing the workout. You can hide the person by using the following script: `generate_images_with_hidden_person.py`
 You can reproduce the annotation generation process using the `generate_keypoints_confidence.py` script located in the `scripts` folder. This script runs the  `YOLO` model over the dataset and outputs keypoints and bounding box annotations with confidence scores.
 
 #### Dataset Augmentation
@@ -149,16 +153,19 @@ We iterated through several versions of this model:
 ![image info](resources/heatmap_fpn_v3.jpg)
 
 #### heatmap_fpn_v3 Architecture
-##### Backbone and Feature Extraction:
-The architecture begins with a pretrained ResNet-50 backbone[[7]](#7), using feature maps up to and including the `layer4` block. These multi-scale feature maps serve as the input for subsequent processing.
-##### Featured Pyramid Network (FPN)
+**Backbone and Feature Extraction:**
+The architecture begins with a pretrained ResNet-50 backbone[[7]](#7), using feature maps up to and including the `layer4` block. These multi-scale feature maps serve as the input for subsequent processing. The backbone parameters are frozen excepts the parameters from the `layer4` block.
+
+**Featured Pyramid Network (FPN)**
 The FPN plays a critical role in keypoint prediction by combining feature maps from different stages of the backbone. This design allows the model to leverage high-resolution features enriched with deep semantic information, which is crucial for precise localization.
-##### Keypoints Head
+
+**Keypoints Head**
 After the FPN, the keypoint prediction head consists of two upsampling blocks:
 1. **Block 1:** `Upsample` → `Conv2d` → `BatchNorm2d` → `ReLU`
 2. **Block 2:** `Upsample` → `Conv2d`
-These blocks progressively upsample the feature maps back to the original input resolution (352x352), enabling the model to produce dense, high-resolution heatmaps for keypoint localization
-##### Bounding Box Head
+These blocks progressively upsample the feature maps back to the original input resolution (352x352), enabling the model to produce dense, high-resolution heatmaps for keypoint localization.
+
+**Bounding Box Head**
 The bbox head in v3 consists of:
 1. **Five** consecutive blocks: `Upsample` → `Conv2d` → `BatchNorm2d` → `ReLU`
 2. A **final** `Conv2d` layer for output generation.
@@ -217,22 +224,22 @@ In the following table, it is demonstrated that the `fpn_v3` architecture signif
 | baseline_heatmap    | 11.59  &  29.2%                 | 0.32          |
 | fpn_v3              | 8.798  &  42.3%                 | 0.85          |
 
-**Details**
+#### Details by head
 
-##### BBox Head
+**BBox**
 
 After 15 epochs, the IoU (Intersection over Union) score for the `fpn_v3` model exceeds **0.85**, while the baseline and baseline_heatmap models remain around **0.35**.
 This significant improvement comes from replacing the fully connected (FC) head with a heatmap-based head.
 ![image info](resources/models_comparison/bbox_iou_val.png)
 
-##### Classification Head
+**Workout Classification**
 
 The classification head remains identical across all architectures. As a result, there is no significant difference in classification metrics between models.
 ![image info](resources/models_comparison/classification_accuracy_val.png)
 ![image info](resources/models_comparison/classification_precision_val.png)
 ![image info](resources/models_comparison/classification_recall_val.png)
 
-##### Keypoints Head
+**Keypoints**
 
 The **Mean Per Joint Position Error (MPJPE)** is substantially lower in the `fpn_v3` model compared to both the `baseline_heatmap` and the `baseline`. Additionally, the **PCK@0.01** (Percentage of Correct Keypoints) metric shows clear improvements for the `fpn_v3` model.
 
@@ -240,6 +247,13 @@ The transition from regression-based outputs to heatmap-based outputs significan
 ![image info](resources/models_comparison/keypoint_mpjpe_val.png)
 ![image info](resources/models_comparison/keypoint_pck_010_val.png)
 ![image info](resources/models_comparison/keypoint_pck_001_val.png)
+
+### Experiment comparing frozen versus unfrozen backbone
+Another experiment we conducted was the unfreeze of the `layer4` of the `ResNet50`. This mechanisim improves a lot the accuracy of the model.
+
+**Bounding Box Results**
+
+**Keypoints Results**
 
 - Final training (200 epochs)
     - Losses

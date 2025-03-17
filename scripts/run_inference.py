@@ -25,9 +25,9 @@ def denormalize_image(img_tensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224,
 
 # Initialize model and load checkpoint
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_50.pth' # Model checkpoint
+checkpoint_path = 'checkpoints/model_epoch_70.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
@@ -71,6 +71,7 @@ bbox_heatmap_pred = output[0]
 bbox_pred = extract_bbox_from_heatmaps(output[0]) 
 heatmap_pred = output[1]            
 keypoints_pred = extract_keypoints_with_confidence(heatmap_pred)
+print(keypoints_pred)
 workout_label_pred = output[2] 
 
 bbox_heatmap_final = bbox_heatmap_pred.squeeze(0).cpu().detach().numpy()
@@ -83,6 +84,8 @@ summed_heatmap = np.sum(heatmap_pred.cpu().detach().numpy(), axis=(0, 1))
 for bbox in bbox_pred:
     x_min, y_min, x_max, y_max = bbox
     cv2.rectangle(image_preprocessed, (int(x_min * target_w), int(y_min * target_h)), (int(x_max * target_w), int(y_max * target_h)), (0, 255, 0), 1)
+
+
 
 # Draw keypoints on the original image1
 filtered_keypoints = []
@@ -115,7 +118,7 @@ for pair in SKELETON:
                      (int(x2 * target_w), int(y2 * target_h)), (0, 0, 255), 1)  # Blue lines
 
 
-with open('resnet50_2025-03-15_19-00-46.json', 'r') as f:
+with open('resnet50_2025-03-16_18-24-22.json', 'r') as f:
     idx_to_class_name = json.load(f)
 
 # Display workout class and probability
