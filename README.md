@@ -103,7 +103,7 @@ The folder in [MEGA](https://mega.nz/folder/cIJEFITB#LCAwIp3KXHMGSwKg847oPw) als
 ## Dataset
 Our dataset is primarily based on the [Workout Exercises Kaggle Dataset](https://www.kaggle.com/datasets/hasyimabdillah/workoutexercises-images/data), which provides workout images along with exercise class labels. However, the original dataset lacks keypoint and bounding box annotations, which are crucial for our task.
 #### Keypoint and Bounding Box Annotations
-To generate keypoint and bounding box labels, we used pseudo ground truth annotations predicted by the `YOLOv11x` model [[4]](#4). After multiple trials, we found it necessary to apply a data cleaning step before generating annotations. Specifically, we removed or masked additional people present in the background to focus solely on the person performing the workout. You can hide the person by using the following script: `generate_images_with_hidden_person.py`
+To generate keypoint and bounding box (bbox) labels, we used pseudo ground truth annotations predicted by the `YOLOv11x` model [[4]](#4). After multiple trials, we found it necessary to apply a data cleaning step before generating annotations. Specifically, we removed or masked additional people present in the background to focus solely on the person performing the workout. You can hide the person by using the following script: `generate_images_with_hidden_person.py`
 You can reproduce the annotation generation process using the `generate_keypoints_confidence.py` script located in the `scripts` folder. This script runs the  `YOLO` model over the dataset and outputs keypoints and bounding box annotations with confidence scores.
 
 #### Dataset Augmentation
@@ -218,28 +218,26 @@ Since the regression losses and heatmap-based losses for bounding boxes and keyp
 
 In the following table, it is demonstrated that the `fpn_v3` architecture significantly outperforms the previous models in predicting both Keypoints and Bounding Boxes (BBox).
 
-| Model               | Keypoint MPJPE & PCK@0.01 (%)   | BBox IoU@0.85 |
-|---------------------|---------------------------------|---------------|
-| baseline            | 15.90  &  2.13%                 | 0.36          |
-| baseline_heatmap    | 11.59  &  29.2%                 | 0.32          |
-| fpn_v3              | 8.798  &  42.3%                 | 0.85          |
+| Model               | Keypoint MPJPE & PCK@0.01       | BBox IoU@0.8 |
+|---------------------|---------------------------------|--------------|
+| baseline            | 15.90  &  0.02                  | 0.36         |
+| baseline_heatmap    | 11.59  &  0.29                  | 0.32         |
+| fpn_v3              | 8.798  &  0.42                  | 0.85         |
 
-#### Details by head
-
-**BBox**
+**Bounding Box Results**
 
 After 15 epochs, the IoU (Intersection over Union) score for the `fpn_v3` model exceeds **0.85**, while the baseline and baseline_heatmap models remain around **0.35**.
 This significant improvement comes from replacing the fully connected (FC) head with a heatmap-based head.
 ![image info](resources/models_comparison/bbox_iou_val.png)
 
-**Workout Classification**
+**Workout Classification Results**
 
 The classification head remains identical across all architectures. As a result, there is no significant difference in classification metrics between models.
 ![image info](resources/models_comparison/classification_accuracy_val.png)
 ![image info](resources/models_comparison/classification_precision_val.png)
 ![image info](resources/models_comparison/classification_recall_val.png)
 
-**Keypoints**
+**Keypoints Results**
 
 The **Mean Per Joint Position Error (MPJPE)** is substantially lower in the `fpn_v3` model compared to both the `baseline_heatmap` and the `baseline`. Additionally, the **PCK@0.01** (Percentage of Correct Keypoints) metric shows clear improvements for the `fpn_v3` model.
 
@@ -249,17 +247,31 @@ The transition from regression-based outputs to heatmap-based outputs significan
 ![image info](resources/models_comparison/keypoint_pck_001_val.png)
 
 ### Experiment comparing frozen versus unfrozen backbone
-Another experiment we conducted was the unfreeze of the `layer4` of the `ResNet50`. This mechanisim improves a lot the accuracy of the model.
+Another experiment we conducted involved unfreezing the `layer4` block of the `ResNet50` backbone. This mechanism significantly improved the overall accuracy of the model.
+
+| Model               | Keypoint MPJPE & PCK@0.01       | BBox IoU@0.8 |
+|---------------------|---------------------------------|--------------|
+| frozen backbone     | 10.1  &  0.61                   | 0.87         |
+| unfrozen backbone   | 4.60  &  0.80                   | 0.97         |
+
 
 **Bounding Box Results**
+We observed a substantial improvement in bounding box accuracy. The `IoU@0.8` increased from 0.87 to over 0.95 on the test set. Additionally, the head `Loss` decreased significantly, indicating better convergence and more precise predictions.
+![image info](resources/frozen_vs_unfrozen_backbone/bbox_iou.jpg)
+![image info](resources/frozen_vs_unfrozen_backbone/bbox_loss.jpg)
 
 **Keypoints Results**
+The keypoints head also demonstrated notable improvements. Both the `MPJPE` and the `Loss` values decreased significantly, while the `PCK@0.01 `metric increased from 0.61 to over 0.8 after 84 epochs.
+![image info](resources/frozen_vs_unfrozen_backbone/keypoints_mpjpe.jpg)
+![image info](resources/frozen_vs_unfrozen_backbone/keypoints_loss.jpg)
+![image info](resources/frozen_vs_unfrozen_backbone/keypoints_pck_001.jpg)
 
-- Final training (200 epochs)
+### Training
     - Losses
     - Accuracy
     - Images from test
-- Inference:
+    
+### Inferece
 
 ## Conclusions
 
@@ -268,9 +280,9 @@ Another experiment we conducted was the unfreeze of the `layer4` of the `ResNet5
 
 ## Limitations
 - **Dataset Quality**: The pseudo-labels generated by YOLOv11x introduce noise, potentially affecting the keypoint prediction quality.
-- **Generalization**: The model was primarily trained on workout exercises and may not generalize well to other types of human poses or different environments.
 - **Multiple Person Detection**: Although we performed image cleaning, the model struggles with scenarios involving multiple people in a frame.
 - **Repetition Counter**: Currently based on simple state machine logic, which may fail in irregular movements or poorly detected keypoints.
+- **Generalization**: The model was primarily trained on workout exercises and may not generalize well to other types of human poses or different environments.
 
 #### Proposals for Improvements
 - **Integrate Self-Attention Mechanisms (Transformers)**
