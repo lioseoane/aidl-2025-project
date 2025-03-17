@@ -179,8 +179,8 @@ This head enables the model to classify the workout in parallel with keypoint an
 
 ## Exercise Counter
 The second part of the project focuses on using our model capable of pose estimation and use it for real-time exercise counting. To do so, the model will extract frames from a video and calculate the person's position (start, medium, end) given the exercise class prediction, and count the repetitions or seconds, out of the predicted results. 
-![image info](resources/counter_scheme.pdf)
-![image info](resources/rep_count.pdf)
+<iframe src="resources/counter_scheme.pdf" width="100%" height="500" frameborder="0" />
+<iframe src="resources/rep_count.pdf" width="100%" height="500" frameborder="0" />
 
 ## Training
 - Info about the training:
