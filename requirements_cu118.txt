@@ -1,0 +1,16 @@
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+torch==2.5.1+cu118
+torchvision==0.20.1+cu118
+
+auto_mix_prep==0.2.0
+matplotlib==3.10.1
+numpy==1.26.1
+opencv_python==4.11.0.86
+Pillow==11.1.0
+scikit_learn==1.6.1
+tensorboard==2.18.0
+timm==1.0.15
+tqdm==4.67.1
+ultralytics==8.3.68
+yt_dlp==2025.2.19

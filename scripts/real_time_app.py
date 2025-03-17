@@ -10,6 +10,9 @@ import torch
 from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
+checkpoint_path = 'model_epoch_130.pth'
+classfication_mapping = 'heatmap_fpn_v3.json'
+
 # Kalmar fiter --> Get smoothed keypoints
 class KalmanFilterKeypoint:
     def __init__(self, process_noise=1e-2, measurement_noise=1e-1):
@@ -45,9 +48,9 @@ class KalmanFilterKeypoint:
 
 # Initialize model and load checkpoint
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50')
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('mps' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-state_dict = torch.load('model_epoch_110.pth', map_location=device, weights_only=True)
+state_dict = torch.load(checkpoint_path, map_location=device, weights_only=True)
 model.load_state_dict(state_dict)
 model.eval()
 
@@ -127,7 +130,7 @@ cv2.namedWindow('Live Prediction', cv2.WINDOW_NORMAL)
 cv2.resizeWindow('Live Prediction', size_x, size_y)
 
 # Load idx_to_class_name during inference
-with open('resnet50_2025-03-16_18-24-22.json', 'r') as f:
+with open(classfication_mapping, 'r') as f:
     idx_to_class_name = json.load(f)
 
 while cap.isOpened():
