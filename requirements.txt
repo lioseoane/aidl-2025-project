@@ -7,7 +7,7 @@ scikit_learn==1.6.1
 tensorboard==2.18.0
 timm==1.0.15
 tqdm==4.67.1
-torch==2.5.1+cu118
-torchvision==0.20.1+cu118
+torch==2.5.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+torchvision==0.20.1+cu118 --index-url https://download.pytorch.org/whl/cu118
 ultralytics==8.3.68
 yt_dlp==2025.2.19

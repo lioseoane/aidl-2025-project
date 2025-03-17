@@ -62,7 +62,7 @@ def main():
         2.2,  # Right Knee
         2.2,  # Left Ankle
         2.2   # Right Ankle
-    ]
+]
 
     apply_flip = True  # Apply horizontal flip augmentation
 
