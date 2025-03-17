@@ -197,3 +197,6 @@ checkpoints/
 
 # Yolo data
 yolo_data/
+
+# Dataset
+workout_dataset
