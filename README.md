@@ -200,37 +200,35 @@ The second part of the project focuses on using our model capable of pose estima
 - `loss_weights`: These weights help in balancing the losses from different tasks (bounding boxes, keypoints, and workout label classification). Default values are `[0.002, 0.95, 0.055]`.
 - `autocast_enabled`: Set to True if you want to use mixed precision training.
 
-Info about the training:
-    - LR rate
-    - Backbone freezing and workout freezing
-    - Loss weight
-    - Losses
-    - Framework
-
 ### Losses
 During training, the `heatmap_fpn_v3` model optimizes a combined loss function that addresses three key tasks: bounding box regression, keypoint heatmap regression, and workout label classification. The overall loss is a weighted sum of the individual loss components.
+
 $$
 \text{Total Loss} = \lambda_{bbox} \cdot \text{BBox Loss} + \lambda_{keypoints} \cdot \text{Keypoints Loss} + \lambda_{classification} \cdot \text{Classification Loss}
 $$
+
 Where:
 - $\lambda_{bbox}$ is the weight for the bounding box loss.
 - $\lambda_{keypoints}$ is the weight for the keypoints loss.
 - $\lambda_{classification}$ is the weight for the classification loss.
 
 #### Bounding Box Loss
-The bounding box loss is calculated using the Mean Squared Error (MSE) between the predicted bounding box heatmaps and the ground truth bounding box heatmaps
+The bounding box loss is calculated using the Mean Squared Error (MSE) between the predicted bounding box heatmaps and the ground truth bounding box heatmaps.
+
 $$
 \text{BBox Loss} = \text{MSE}(\text{Predicted BBox Heatmaps}, \text{Ground Truth BBox Heatmaps})
 $$
 
 #### Keypoints Loss
 The keypoints loss is calculated using the Mean Squared Error (MSE) between the predicted keypoint heatmaps and the ground truth keypoint heatmaps, with an important addition: a confidence mask.
+
 $$
 \text{Keypoints Loss} = \frac{\sum (\text{MSE}(\text{Predicted Keypoint Heatmaps}, \text{Ground Truth Keypoint Heatmaps}) \cdot \text{Confidence Mask})}{\sum \text{Confidence Mask} + \epsilon}
 $$
 
 #### Classification Loss
 The classification loss is calculated using the Cross-Entropy Loss between the predicted workout class probabilities and the ground truth workout class labels.
+
 $$
 \text{Classification Loss} = \text{CrossEntropyLoss}(\text{Predicted Class Probabilities}, \text{Ground Truth Class Labels})
 $$
