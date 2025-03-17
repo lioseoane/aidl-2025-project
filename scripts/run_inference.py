@@ -11,6 +11,9 @@ import torch
 from src.models.heatmap_fpn_v3 import heatmap_fpn
 from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_from_heatmaps
 
+checkpoint_path = 'model_epoch_130.pth'
+classfication_mapping = 'heatmap_fpn_v3.json'
+
 def denormalize_image(img_tensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     """
     img_tensor: Tensor (C x H x W) normalized image
@@ -25,9 +28,8 @@ def denormalize_image(img_tensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224,
 
 # Initialize model and load checkpoint
 model = heatmap_fpn(num_classes=20, num_keypoints=17, backbone='resnet50') # Model config
-device = torch.device('cuda' if torch.cda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-checkpoint_path = 'checkpoints/model_epoch_70.pth' # Model checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint)
 model.eval()
@@ -91,7 +93,7 @@ for bbox in bbox_pred:
 filtered_keypoints = []
 for i, point in enumerate(keypoints_pred[0]):
     x, y, confidence = point
-    if confidence >= 0.5:  # Only draw visible keypoints
+    if confidence >= 0.4:  # Only draw visible keypoints
         cv2.circle(image_preprocessed, (int(x * target_w), int(y * target_h)), 1, (1, 0, 0), -1)  # Red dots for keypoints
         filtered_keypoints.append((i, x, y))  # Store valid keypoints for skeleton drawing
 
@@ -117,8 +119,8 @@ for pair in SKELETON:
         cv2.line(image_preprocessed, (int(x1 * target_w), int(y1 * target_h)), 
                      (int(x2 * target_w), int(y2 * target_h)), (0, 0, 255), 1)  # Blue lines
 
-
-with open('resnet50_2025-03-16_18-24-22.json', 'r') as f:
+# idx to class name
+with open(classfication_mapping, 'r') as f:
     idx_to_class_name = json.load(f)
 
 # Display workout class and probability
