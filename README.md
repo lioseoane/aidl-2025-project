@@ -186,7 +186,9 @@ The Workout Classification Head predicts the workout type from the global featur
 This head enables the model to classify the workout in parallel with keypoint and bounding box predictions.
 
 ## Exercise Counter
-- Info about the exercise counter
+The second part of the project focuses on using our model capable of pose estimation and use it for real-time exercise counting. To do so, the model will extract frames from a video and calculate the person's position (start, medium, end) given the exercise class prediction, and count the repetitions or seconds, out of the predicted results. 
+![image info](resources/counter_scheme.png)
+![image info](resources/rep_count.png)
 
 ## Model Training
 
