@@ -154,7 +154,7 @@ We iterated through several versions of this model:
 
 #### heatmap_fpn_v3 Architecture
 **Backbone and Feature Extraction:**
-The architecture begins with a pretrained ResNet-50 backbone[[7]](#7), using feature maps up to and including the `layer4` block. These multi-scale feature maps serve as the input for subsequent processing. The backbone parameters are frozen excepts the parameters from the `layer4` block.
+The architecture begins with a pretrained ResNet-50 backbone[[7]](#7), using feature maps up to and including the `layer4` block. These multi-scale feature maps serve as the input for subsequent processing. The backbone parameters are frozen except the parameters from the `layer4` block.
 
 **Featured Pyramid Network (FPN)**
 The FPN plays a critical role in keypoint prediction by combining feature maps from different stages of the backbone. This design allows the model to leverage high-resolution features enriched with deep semantic information, which is crucial for precise localization.
@@ -178,7 +178,9 @@ The Workout Label Head predicts the workout type from the global features of the
 This head enables the model to classify the workout in parallel with keypoint and bounding box predictions.
 
 ## Exercise Counter
-- Info about the exercise counter
+The second part of the project focuses on using our model capable of pose estimation and use it for real-time exercise counting. To do so, the model will extract frames from a video and calculate the person's position (start, medium, end) given the exercise class prediction, and count the repetitions or seconds, out of the predicted results. 
+![image info](resources/counter_scheme.pdf)
+![image info](resources/rep_count.pdf)
 
 ## Training
 - Info about the training:
