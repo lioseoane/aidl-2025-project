@@ -162,6 +162,7 @@ We iterated through several versions of this model:
 - **heatmap_fpn_v3:** Replaced `ConvTranspose` layers with `Upsample` + `Conv2d` blocks [[4]](#4), reducing model complexity and speeding up training. Additionally, v3 further reduced the model’s capacity while maintaining performance, leading to faster convergence.
 
 ### heatmap_fpn_v3 Architecture
+
 ![image info](resources/heatmap_fpn_v3.jpg)
 
 #### Backbone and Feature Extraction:
@@ -295,10 +296,12 @@ In the following table, it is demonstrated that the `fpn_v3` architecture signif
 #### Bounding Box Results
 After 15 epochs, the IoU (Intersection over Union) score for the `fpn_v3` model exceeds **0.85**, while the baseline and baseline_heatmap models remain around **0.35**.
 This significant improvement comes from replacing the fully connected (FC) head with a heatmap-based head.
+
 ![image info](resources/models_comparison/bbox_iou_val.png)
 
 #### Workout Classification Results
 The classification head remains identical across all architectures. As a result, there is no significant difference in classification metrics between models.
+
 ![image info](resources/models_comparison/classification_accuracy_val.png)
 ![image info](resources/models_comparison/classification_precision_val.png)
 ![image info](resources/models_comparison/classification_recall_val.png)
@@ -307,6 +310,7 @@ The classification head remains identical across all architectures. As a result,
 The **Mean Per Joint Position Error (MPJPE)** is substantially lower in the `fpn_v3` model compared to both the `baseline_heatmap` and the `baseline`. Additionally, the **PCK@0.01** (Percentage of Correct Keypoints) metric shows clear improvements for the `fpn_v3` model.
 
 The transition from regression-based outputs to heatmap-based outputs significantly improves performance. Furthermore, integrating the Feature Pyramid Network (FPN) boosts overall accuracy in keypoint estimation.
+
 ![image info](resources/models_comparison/keypoint_mpjpe_val.png)
 ![image info](resources/models_comparison/keypoint_pck_010_val.png)
 ![image info](resources/models_comparison/keypoint_pck_001_val.png)
@@ -322,11 +326,13 @@ The second experiment focused on unfreezing the `layer4` block of the `ResNet50`
 
 #### Bounding Box Results
 We observed a substantial improvement in bounding box accuracy. The `IoU@0.8` increased from 0.87 to over 0.95 on the test set. Additionally, the head `Loss` decreased significantly, indicating better convergence and more precise predictions.
+
 ![image info](resources/frozen_vs_unfrozen_backbone/bbox_iou.jpg)
 ![image info](resources/frozen_vs_unfrozen_backbone/bbox_loss.jpg)
 
 #### Keypoints Results
 The keypoints head also demonstrated notable improvements. Both the `MPJPE` and the `Loss` values decreased significantly, while the `PCK@0.01 `metric increased from 0.61 to over 0.8 after 84 epochs.
+
 ![image info](resources/frozen_vs_unfrozen_backbone/keypoints_mpjpe.jpg)
 ![image info](resources/frozen_vs_unfrozen_backbone/keypoints_loss.jpg)
 ![image info](resources/frozen_vs_unfrozen_backbone/keypoints_pck_001.jpg)
