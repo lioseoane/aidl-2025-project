@@ -199,4 +199,7 @@ checkpoints/
 yolo_data/
 
 # Dataset
-workout_dataset
+workout_dataset/
+workout_dataset/new_images
+workout_dataset/new_labels
+
