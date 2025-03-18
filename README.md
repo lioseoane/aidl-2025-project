@@ -385,6 +385,22 @@ These metrics confirm that the classification head is able to distinguish betwee
 ## Conclusions
 
 ### Key Achievements
+
+#### Accurate Pose Estimation:
+The model successfully estimates keypoints with high accuracy, achieving a PCK@0.01 of 77.31% and an MPJPE of 3.58 on the validation set, demonstrating its effectiveness in localizing human joints.
+
+#### Improved Architecture:
+Transitioning from a fully connected regression model to a heatmap-based approach with Feature Pyramid Networks (FPN) significantly enhanced both keypoint and bounding box accuracy.
+
+#### Optimized Bounding Box Detection:
+The final model achieves an IoU@0.8 of 0.97, reflecting highly precise localization of individuals in workout settings.
+
+#### Effective Workout Classification:
+The classification head provides reliable predictions, maintaining an accuracy of 98.8%, ensuring robust exercise recognition.
+
+#### Real-Time Performance:
+The implementation supports real-time inference, allowing users to track their workout progress effectively.
+
 ### Challenges
 
 ## Limitations
