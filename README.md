@@ -427,12 +427,17 @@ Future iterations should address multi-person detection and person re-identifica
 
 ## Demo
 
-#### Real-time Inference with Webcam
-You can run a real-time demo by executing:
-`python scripts/real_time_app.py`
+#### Real-time Inference and Counter
+You can run a real-time demo or process a video by executing:
+`python scripts/real_time_counter.py`
+In the demo folder, we have put a video recorded from an squat exercise. `squat_processed_0.0.mp4`
 
+#### Real-time Inference with Webcam
+If you want to see just the model inference. You can run a real-time demo by executing:
+`python scripts/real_time_app.py`
 In the demo folder, we have put a video recorded at home using the real_time_app without any regularization technique.
-`demo/model_inference.py`
+`model_inference.mp4`
+ 
 
 ## Bibliography
 
