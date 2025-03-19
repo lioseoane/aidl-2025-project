@@ -203,3 +203,5 @@ workout_dataset/
 workout_dataset/new_images
 workout_dataset/new_labels
 
+vscode/
+.vscode
