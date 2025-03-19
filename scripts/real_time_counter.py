@@ -15,8 +15,8 @@ from src.utils.heatmaps import extract_keypoints_with_confidence, extract_bbox_f
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-FRAME_SKIP = 10  # Process every 3rd frame for efficiency
-CONF_HISTORY = 5  # Number of past classifications to consider
+FRAME_SKIP = 10  # Process every 100rd frame for efficiency
+CONF_HISTORY = 60  # Number of past classifications to consider
 class_smoothing = deque(maxlen=CONF_HISTORY)
 
 def load_model(our_model = False):
@@ -60,80 +60,126 @@ def frames_to_video(frames_dir, output_filename="output_video.mp4", fps=30, fram
     out.release()
     print(f"Video saved successfully: {output_filename}")
 
-# predict the model
-def predict(frame, model):
-    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    h, w, _ = image.shape
-    target_w, target_h = [352, 352]
-
-    scale = min(target_w / float(w), target_h / float(h))
-    new_w, new_h = int(w * scale), int(h * scale)
-    image = cv2.resize(image, (new_w, new_h))
-
-    pad_top = (target_h - new_h) // 2
-    pad_bottom = target_h - new_h - pad_top
-    pad_left = (target_w - new_w) // 2
-    pad_right = target_w - new_w - pad_left
-
-    image = cv2.copyMakeBorder(
-        image, pad_top, pad_bottom, pad_left, pad_right,
-        borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0]
-    )
-
-    sample_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize
-    sample_tensor = sample_tensor.unsqueeze(0).to(device)
-
-    with torch.no_grad():
-        output = model(sample_tensor)
-
-    bbox_pred = extract_bbox_from_heatmaps(output[0])
-    keypoints_pred = extract_keypoints_with_confidence(output[1])
-
-    with open('heatmap_fpn_v3.json', 'r') as f:
-        idx_to_class_name = json.load(f)
-    probabilities = torch.softmax(output[2][0], dim=0)
-    predicted_class_idx = torch.argmax(probabilities).item()
-    predicted_class_name = idx_to_class_name[str(predicted_class_idx)]
-    class_smoothing.append(predicted_class_name)
-    smoothed_class = max(set(class_smoothing), key=class_smoothing.count)
-
-    return bbox_pred, keypoints_pred, smoothed_class, h, w, pad_left, pad_top, new_w, new_h
-
 # Exercise Counter Class
 class ExerciseCounter:
-    def __init__(self, conf_threshold: float = 0.0):
+    def __init__(self, conf_threshold: float = 0.3):
         self.counter = 0
         self.stage = None
         self.conf_threshold = conf_threshold
 
-    def _get_angle(self, keypoints, kp_confs, indices):
+    def _get_angle(self, keypoints, kp_confs, indices, fallback_model, frame = None):
+        # Check if all required keypoints have confidence above threshold
         if all(i < len(keypoints) and kp_confs[i] >= self.conf_threshold for i in indices):
             return calculate_angle(keypoints[indices[0]], keypoints[indices[1]], keypoints[indices[2]])
+
+        print(f"Low confidence keypoints detected. Running YOLO fallback")
+
+        # Run YOLO model for keypoints prediction
+        yolo_results = fallback_model(frame)
+        
+        if not yolo_results or yolo_results[0].keypoints is None:
+            print("YOLO failed to detect keypoints")
+            return None  # No keypoints detected by YOLO either
+
+        # Extract YOLO keypoints and confidence scores
+        yolo_keypoints = yolo_results[0].keypoints.xy.cpu().numpy()[0]  # YOLO keypoints
+        yolo_confidences = yolo_results[0].keypoints.conf.cpu().numpy()[0]  # YOLO confidences
+
+        # Check if YOLO keypoints are confident enough
+        if all(yolo_confidences[i] >= self.conf_threshold for i in indices):
+            print("Using YOLO-predicted keypoints")
+            return calculate_angle(yolo_keypoints[indices[0]], yolo_keypoints[indices[1]], yolo_keypoints[indices[2]])
+
+        print("YOLO keypoints also have low confidence. Skipping angle calculation")
         return None
+    
+    def predict(self, frame, model):
+        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        h, w, _ = image.shape
+        target_w, target_h = [352, 352]
+
+        scale = min(target_w / float(w), target_h / float(h))
+        new_w, new_h = int(w * scale), int(h * scale)
+        image = cv2.resize(image, (new_w, new_h))
+
+        pad_top = (target_h - new_h) // 2
+        pad_bottom = target_h - new_h - pad_top
+        pad_left = (target_w - new_w) // 2
+        pad_right = target_w - new_w - pad_left
+
+        image = cv2.copyMakeBorder(
+            image, pad_top, pad_bottom, pad_left, pad_right,
+            borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0]
+        )
+
+        sample_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize
+        sample_tensor = sample_tensor.unsqueeze(0).to(device)
+
+        with torch.no_grad():
+            output = model(sample_tensor)
+
+        bbox_pred = extract_bbox_from_heatmaps(output[0])
+        keypoints_pred = extract_keypoints_with_confidence(output[1])
+
+        with open('heatmap_fpn_v3.json', 'r') as f:
+            idx_to_class_name = json.load(f)
+        probabilities = torch.softmax(output[2][0], dim=0)
+        predicted_class_idx = torch.argmax(probabilities).item()
+        predicted_class_name = idx_to_class_name[str(predicted_class_idx)]
+        if len(class_smoothing) > 0:
+            previous_class = max(set(class_smoothing), key=class_smoothing.count)
+        else:
+            previous_class = "Unknown"
+        class_smoothing.append(predicted_class_name)
+        if len(class_smoothing) > 0:
+            smoothed_class = max(set(class_smoothing), key=class_smoothing.count)
+            # Reset counter if smoothed class is different from last frame
+            if smoothed_class != previous_class:
+                self.counter = 0
+        else:
+            smoothed_class = "Unknown"
+
+        return bbox_pred, keypoints_pred, smoothed_class, h, w, pad_left, pad_top, new_w, new_h
 
     def process_frame(self, frame, keypoints, kp_confs, bbox, exercise_type, h, w, pad_left, pad_top, new_w, new_h):
+
+        fallback_model = YOLO("yolov8x-pose")
+
         left_indices, right_indices, key_body_part = {
             "deadlift": ((11, 13, 15), (12, 14, 16), "whole body"),
             "squat": ((11, 13, 15), (12, 14, 16), "lower body"),
-            "push-up": ((5, 7, 9), (6, 8, 10), "upper body"),
-            "benchpress": ((5, 7, 9), (6, 8, 10), "upper body")
+            "push up": ((5, 7, 9), (6, 8, 10), "upper body"),
+            "benchpress": ((5, 7, 9), (6, 8, 10), "upper body"),
+            "leg extension": ((11, 13, 15), (12, 14, 16), "lower body"),
+            "chest fly machine": ((5, 7, 9), (6, 8, 10), "upper body"),
+            "pull up": ((5, 7, 9), (6, 8, 10), "upper body"),
+            "dumbbell curl": ((5, 7, 9), (6, 8, 10), "upper body"),
+            "shoulder press": ((5, 7, 9), (6, 8, 10), "upper body"),
+            "lateral raise": ((5, 7, 9), (6, 8, 10), "upper body"),
         }.get(exercise_type, (None, None, None))
 
         if not left_indices:
             return frame
 
-        left_angle = self._get_angle(keypoints, kp_confs, left_indices)
-        right_angle = self._get_angle(keypoints, kp_confs, right_indices)
+        left_angle = self._get_angle(keypoints, kp_confs, left_indices, fallback_model, frame)
+        right_angle = self._get_angle(keypoints, kp_confs, right_indices, fallback_model, frame)
         angle = (left_angle + right_angle) / 2.0 if left_angle and right_angle else left_angle or right_angle
+        print(f"Left Angle: {left_angle} | Right Angle: {right_angle}")
+        print(f"Angle: {angle}")
         if angle is None or any(i >= len(keypoints) for i in left_indices + right_indices):
             print("Skipping frame due to missing keypoints")
             print("angle is None: ", angle is None)
             print("any: ", any(i >= len(keypoints) for i in left_indices + right_indices))
+            cv2.putText(frame, f'Exercise: {exercise_type}', (50, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 0), 3)
+        
+            cv2.putText(frame, f'Reps: {self.counter} | Stage: {self.stage}', (50, 100),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
             return frame
 
         thresholds = {
-            "upper body": {"start": 120, "end": 100},
+            "upper body": {"start": 140, "end": 120},
             "lower body": {"start": 150, "end": 100},
             "whole body": {"start": 130, "end": 110}
         }
@@ -196,31 +242,56 @@ class ExerciseCounter:
         return frame
 
 # Main Processing Function
-def main(exercise, our_model = False):
-    video_path = f"notebooks/video_samples/{exercise}_sample.mp4"
+def main(our_model = False):
+    #video_paths = [f"notebooks/video_samples/push-up_sample.mp4", f"notebooks/video_samples/squat_sample.mp4"]
+    video_paths = [f"demo/model_inference.mp4"]
+
     output_frames_dir = "demo/output_frames/"
-    output_video_path = f"demo/{exercise}_processed_0.0.mp4"
+    output_video_path = f"demo/demo_processed_0.0.mp4"
     os.makedirs(output_frames_dir, exist_ok=True)
 
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print(f"Error: Unable to open video file {video_path}")
-        return
+    # Open multiple videos
+    cap_list = [cv2.VideoCapture(video) for video in video_paths]
+
+    # Check if any video failed to open
+    for idx, cap in enumerate(cap_list):
+        if not cap.isOpened():
+            print(f"Error: Unable to open video file {video_paths[idx]}")
+            return
     
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap_list[0].get(cv2.CAP_PROP_FPS) or 30
+    print(fps)
+    total_frames = sum(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) for cap in cap_list)
     counter = ExerciseCounter()
     frame_index = 0
     model = load_model(our_model)
 
     while frame_index < total_frames:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-        ret, frame = cap.read()
+        
+        if not cap_list:
+            break  # Stop if all videos are processed
 
+        frame_index += 1
+
+        # (A) SKIP INFERENCE
+        if frame_index % FRAME_SKIP != 0:
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            continue
+        else:
+            print(f"Processing frame {frame_index}/{total_frames}")
+
+        ret, frame = cap_list[0].read()
         if not ret:
-            break
+            cap_list[0].release() 
+            cap_list.pop(0) # Remove completed video
+            if cap_list:
+                continue
+            else:
+                break
+
         if our_model:
-            bbox, keypoints, exercise, h, w, pad_left, pad_top, new_w, new_h = predict(frame, model)
+            bbox, keypoints, exercise, h, w, pad_left, pad_top, new_w, new_h = counter.predict(frame, model)
             kp_confs = []
             for i, point in enumerate(keypoints[0]):
                 x, y, confidence = point
@@ -234,10 +305,15 @@ def main(exercise, our_model = False):
                 keypoints = result[0].keypoints.xy.cpu().numpy()[0]
                 kp_confs = result[0].keypoints.conf.cpu().numpy()[0]
                 bbox = result[0].boxes.xyxy.cpu().numpy()[0] if result[0].boxes else None
+                if len(class_smoothing) > 0:
+                    exercise = max(set(class_smoothing), key=class_smoothing.count)
+                else:
+                    exercise = "Unknown"
                 frame = counter.process_frame(frame, keypoints, kp_confs, bbox, exercise)
 
         frame_filename = os.path.join(output_frames_dir, f"frame_{frame_index:04d}.jpg")
         cv2.imwrite(frame_filename, frame)
+        #print(class_smoothing)
         frame_index += 1
 
     cap.release()
@@ -246,7 +322,7 @@ def main(exercise, our_model = False):
     frames_to_video(output_frames_dir, output_video_path, fps)
 
 if __name__ == "__main__":
-    IMAGE_DIR = "notebooks/output_frames/"
+    IMAGE_DIR = "demo/output_frames/"
     for file in glob.glob(os.path.join(IMAGE_DIR, "*.jpg")):
         os.remove(file)
-    main("squat", our_model = True)
+    main(our_model = True)
