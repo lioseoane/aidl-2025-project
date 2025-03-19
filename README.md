@@ -386,27 +386,28 @@ These metrics confirm that the classification head is able to distinguish betwee
 
 ### Key Achievements
 
-#### Accurate Pose Estimation
+1. **Accurate Pose Estimation:**
 The model successfully estimates keypoints with high accuracy, achieving a PCK@0.01 of 77.31% and an MPJPE of 3.58 on the validation set, demonstrating its effectiveness in localizing human joints.
 
-#### Improved Architecture
-
+1. **Improved Architecture:**
 Transitioning from a fully connected regression model to a heatmap-based approach with Feature Pyramid Networks (FPN) significantly enhanced both keypoint and bounding box accuracy.
 
-#### Optimized Bounding Box Detection
+1. **Optimized Bounding Box Detection:**
 The final model achieves an IoU@0.8 of 0.97, reflecting highly precise localization of individuals in workout settings.
 
-#### Effective Workout Classification
+1. **Effective Workout Classification:**
 The classification head provides reliable predictions, maintaining an accuracy of 98.8%, ensuring robust exercise recognition.
 
-#### Real-Time Performance:
+1. **Real-Time Performance:**
 The implementation supports real-time inference, allowing users to track their workout progress effectively.
 
 ### Challenges and Limitations
 
-1. **Dataset Quality**: The keypoint and bounding box labels were generated using pseudo-labels from YOLOv11x. Although this facilitated the annotation process, it introduced label noise that potentially impacted the accuracy of keypoint predictions.
+1. **Dataset Quality**:
+The keypoint and bounding box labels were generated using pseudo-labels from YOLOv11x. Although this facilitated the annotation process, it introduced label noise that potentially impacted the accuracy of keypoint predictions.
 
-2. **Multiple Person Detection**: Although we performed image cleaning, the model struggles with scenarios involving multiple people in a frame.
+2. **Multiple Person Detection**:
+Although we performed image cleaning, the model struggles with scenarios involving multiple people in a frame.
 
 3. **Repetition Counter**: Currently based on simple state machine logic, which may fail in irregular movements or poorly detected keypoints.
 
@@ -414,14 +415,14 @@ The implementation supports real-time inference, allowing users to track their w
 
 ### Proposals for Improvements
 
-1. **Integrate Self-Attention Mechanisms (Transformers)**
+1. **Integrate Self-Attention Mechanisms (Transformers):**
 Recent research, such as ViTPose [[5]](#5), demonstrates that self-attention significantly improves keypoint detection accuracy by capturing long-range dependencies and global context. Incorporating transformer-based architectures or adding self-attention layers to the existing model could enhance both precision and robustness in keypoint localization.
 Unfortunately, due to time constraints, we have not yet explored this architecture in our current work.
 
-2. **Introduce Automated Hyperparameter Tuning with Proper Validation Splits** 
+2. **Introduce Automated Hyperparameter Tuning with Proper Validation Splits:** 
 In the current implementation, hyperparameters—such as learning rate, loss weights, and augmentation settings—were manually selected through trial and error, often requiring extensive post-training analysis and adjustments. There is an opportunity to streamline this process by implementing a **proper validation pipeline** and leveraging **automated hyperparameter tuning** tools (e.g., Optuna, Ray Tune). A more systematic approach to tuning would reduce manual intervention, improve reproducibility, and potentially lead to better model performance.  
 
-3. **Improved Multi-Person Handling**
+3. **Improved Multi-Person Handling:**
 Future iterations should address multi-person detection and person re-identification to focus accurately on the primary subject in the frame, even in crowded environments.
 
 ## Demo
@@ -429,6 +430,9 @@ Future iterations should address multi-person detection and person re-identifica
 #### Real-time Inference with Webcam
 You can run a real-time demo by executing:
 `python scripts/real_time_app.py`
+
+In the demo folder, we have put a video recorded at home using the real_time_app without any regularization technique.
+`demo/model_inference.py`
 
 ## Bibliography
 
